@@ -309,14 +309,15 @@ def fetch_youtube_views(video_ids: list = None) -> dict:
 
 def fetch_reddit_signals() -> dict:
     """
-    Fetch post volume and upvote velocity from r/marvelstudios and r/dune.
-    Uses Reddit's OAuth2 client-credentials flow (no user login required).
+    Fetch post volume and upvote velocity from r/marvelstudios and r/dune
+    using PRAW (Python Reddit API Wrapper). PRAW handles auth, token refresh,
+    and rate limiting automatically — no manual OAuth dance needed.
 
     To set up (free, ~5 min):
     1. Go to https://www.reddit.com/prefs/apps
-    2. Click "create another app" → select "script"
-    3. Name it (e.g. "DunesdaySignals"), set redirect URI to http://localhost:8080
-    4. Copy the client_id (shown under the app name) and the client_secret
+    2. Click "create another app" → select type "script"
+    3. Name it (e.g. "dunesday"), set redirect URI to http://localhost:8080
+    4. Copy the client_id (under the app name) and the client_secret
     5. Add to Streamlit secrets:
          REDDIT_CLIENT_ID     = "your-client-id"
          REDDIT_CLIENT_SECRET = "your-client-secret"
@@ -345,61 +346,36 @@ def fetch_reddit_signals() -> dict:
         }
 
     try:
-        import requests
+        import praw
 
-        user_agent = "DunesdaySignals/1.0 (box office research; contact via github.com/dunesday)"
-
-        # OAuth2 client credentials — app-only token, no user account needed
-        token_resp = requests.post(
-            "https://www.reddit.com/api/v1/access_token",
-            auth=(client_id, client_secret),
-            data={"grant_type": "client_credentials"},
-            headers={"User-Agent": user_agent},
-            timeout=10,
+        reddit = praw.Reddit(
+            client_id=client_id,
+            client_secret=client_secret,
+            user_agent="dunesday/1.0 (box office research)",
         )
-        token_resp.raise_for_status()
-        token = token_resp.json().get("access_token")
-        if not token:
-            return {"status": "error", "message": "Reddit OAuth succeeded but returned no access token"}
-
-        headers = {
-            "Authorization": f"Bearer {token}",
-            "User-Agent":    user_agent,
-        }
 
         cutoff  = datetime.datetime.utcnow().timestamp() - 86_400  # 24 hours ago
         results = {}
 
-        for film, subreddit in REDDIT_SUBREDDITS.items():
-            # ── Hot posts → upvote velocity (buzz intensity signal) ───────────
-            hot_resp = requests.get(
-                f"https://oauth.reddit.com/r/{subreddit}/hot",
-                headers=headers,
-                params={"limit": 25},
-                timeout=10,
-            )
-            hot_resp.raise_for_status()
-            hot_posts  = hot_resp.json().get("data", {}).get("children", [])
-            # Exclude stickied mod posts — they inflate the average artificially
-            scores     = [p["data"]["score"] for p in hot_posts if not p["data"].get("stickied")]
-            hot_avg    = float(np.mean(scores)) if scores else None
+        for film, subreddit_name in REDDIT_SUBREDDITS.items():
+            sub = reddit.subreddit(subreddit_name)
 
-            # ── New posts (last 24h) → post volume (sustained interest signal) ─
-            new_resp = requests.get(
-                f"https://oauth.reddit.com/r/{subreddit}/new",
-                headers=headers,
-                params={"limit": 100},
-                timeout=10,
-            )
-            new_resp.raise_for_status()
-            new_posts = new_resp.json().get("data", {}).get("children", [])
+            # Hot posts → upvote velocity (buzz intensity signal)
+            # Exclude stickied mod posts — they inflate the average artificially
+            scores = [
+                post.score for post in sub.hot(limit=25)
+                if not post.stickied
+            ]
+            hot_avg = float(np.mean(scores)) if scores else None
+
+            # New posts (last 24h) → post volume (sustained interest signal)
             posts_24h = sum(
-                1 for p in new_posts
-                if p["data"].get("created_utc", 0) >= cutoff
+                1 for post in sub.new(limit=100)
+                if post.created_utc >= cutoff
             )
 
             results[film] = {
-                "subreddit":     subreddit,
+                "subreddit":     subreddit_name,
                 "hot_score_avg": round(hot_avg, 1) if hot_avg is not None else None,
                 "posts_24h":     posts_24h,
             }
