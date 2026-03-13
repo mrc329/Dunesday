@@ -5,3 +5,4 @@ plotly>=5.18.0
 scipy>=1.11.0
 pulp>=2.7.0
 pytrends>=4.9.0
+requests>=2.31.0
