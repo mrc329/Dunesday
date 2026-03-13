@@ -1,0 +1,8 @@
+[theme]
+# Base is "light" so Streamlit's own chrome (scrollbars, inputs) uses a light
+# foundation.  Our custom CSS + JS detection layer controls the actual palette.
+base = "light"
+backgroundColor = "#f5f1e8"
+secondaryBackgroundColor = "#ece8de"
+textColor = "#1a1816"
+font = "serif"
