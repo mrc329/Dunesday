@@ -21,31 +21,84 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# ── PALETTE ───────────────────────────────────────────────────────────────────
-DUNE_COLOR  = "#d4a030"    # Arrakis amber — spice, desert sun
-AV_COLOR    = "#cc2030"    # Avengers crimson — deeper, more saturated
-CYAN_COLOR  = "#00b4c2"    # teal reference line (muted)
-BG_COLOR    = "#04060c"    # near-black
-PANEL_COLOR = "#070a12"    # barely lighter (charts only)
-TEXT_COLOR  = "#cdc8be"    # warm off-white — high contrast, eye-easy
-DIM_COLOR   = "#3c4e62"    # muted labels / section heads
-AXIS_COLOR  = "rgba(255,255,255,0.09)"
+# ── PALETTES ───────────────────────────────────────────────────────────────────
+#  dark  — near-black field, warm off-white type (current)
+#  light — Tufte paper/linen, near-black ink
+PALETTES: dict[str, dict] = {
+    "dark": {
+        "bg":           "#04060c",
+        "sidebar_bg":   "#040710",
+        "text":         "#cdc8be",
+        "dim":          "#3c4e62",
+        "card_rule":    "#141e2c",
+        "axis":         "rgba(255,255,255,0.09)",
+        "vline_ref":    "rgba(255,255,255,0.15)",
+        "chart_font":   "#8a9daf",
+        "mid_ref":      "#667788",
+        "footer":       "#1e3048",
+        "dune":         "#d4a030",   # Arrakis amber
+        "av":           "#cc2030",   # Avengers crimson
+        "cyan":         "#00b4c2",
+        "conf_medium":  "#d48020",
+        "fill_dune":    "rgba(212,160,48,0.12)",
+        "fill_av":      "rgba(204,32,48,0.10)",
+        "info_bg":      "rgba(0,180,194,0.07)",
+    },
+    "light": {
+        "bg":           "#f5f1e8",   # aged paper
+        "sidebar_bg":   "#ece8de",
+        "text":         "#1a1816",   # near-black ink
+        "dim":          "#7a6e62",   # warm muted brown
+        "card_rule":    "#cdc8bc",
+        "axis":         "rgba(0,0,0,0.12)",
+        "vline_ref":    "rgba(0,0,0,0.15)",
+        "chart_font":   "#4a4038",
+        "mid_ref":      "#8a7a6a",
+        "footer":       "#8a7a6a",
+        "dune":         "#8c6400",   # amber darkened for light bg
+        "av":           "#921520",   # crimson darkened for light bg
+        "cyan":         "#006070",   # teal darkened for light bg
+        "conf_medium":  "#9a6010",
+        "fill_dune":    "rgba(140,100,0,0.10)",
+        "fill_av":      "rgba(146,21,32,0.09)",
+        "info_bg":      "rgba(0,96,112,0.07)",
+    },
+}
 
-# ── GLOBAL CSS ────────────────────────────────────────────────────────────────
-st.markdown(f"""
+# ── THEME STATE — must init before any widget ──────────────────────────────────
+if "theme" not in st.session_state:
+    st.session_state.theme = "dark"
+
+P = PALETTES[st.session_state.theme]
+
+
+# ── CSS ────────────────────────────────────────────────────────────────────────
+def build_css(P: dict) -> str:
+    return f"""
 <style>
-  /* layout density */
+  /* ── global background ── */
+  [data-testid="stApp"],
+  .main,
+  section.main > div.block-container {{
+    background-color: {P['bg']} !important;
+  }}
   .block-container {{
     padding-top: 0.6rem !important;
     padding-bottom: 0.5rem !important;
   }}
-  .main {{ background-color: {BG_COLOR}; }}
 
-  /* metric cards — Tufte: top rule, no box */
+  /* ── body text ── */
+  .stMarkdown p, .stMarkdown li, .stMarkdown span,
+  [data-testid="stText"], [data-testid="stCaptionContainer"] p,
+  label, .stCaption {{
+    color: {P['text']} !important;
+  }}
+
+  /* ── metric cards — Tufte: top rule, no box ── */
   .stMetric {{
     background: transparent !important;
     border: none !important;
-    border-top: 1px solid #141e2c !important;
+    border-top: 1px solid {P['card_rule']} !important;
     padding: 10px 0 6px !important;
     border-radius: 0 !important;
   }}
@@ -53,7 +106,7 @@ st.markdown(f"""
     font-size: 1.65rem !important;
     font-variant-numeric: tabular-nums !important;
     font-weight: 700 !important;
-    color: {TEXT_COLOR} !important;
+    color: {P['text']} !important;
     line-height: 1.15 !important;
     letter-spacing: -0.5px !important;
   }}
@@ -61,7 +114,7 @@ st.markdown(f"""
     font-size: 0.58rem !important;
     letter-spacing: 1.8px !important;
     text-transform: uppercase !important;
-    color: {DIM_COLOR} !important;
+    color: {P['dim']} !important;
     font-weight: 400 !important;
   }}
   [data-testid="stMetricDelta"] svg {{ display: none !important; }}
@@ -70,36 +123,88 @@ st.markdown(f"""
     font-variant-numeric: tabular-nums !important;
   }}
 
-  /* verdict box */
+  /* ── verdict box ── */
   .verdict-box {{
-    border-left: 2px solid {DUNE_COLOR};
+    border-left: 2px solid {P['dune']};
     padding: 14px 20px;
     margin: 8px 0;
     line-height: 1.8;
+    color: {P['text']};
   }}
 
-  /* sidebar */
-  div[data-testid="stSidebarContent"] {{ background: #040710; }}
+  /* ── sidebar ── */
+  [data-testid="stSidebar"] > div,
+  div[data-testid="stSidebarContent"] {{
+    background: {P['sidebar_bg']} !important;
+  }}
+  [data-testid="stSidebar"] .stMarkdown p,
+  [data-testid="stSidebar"] label,
+  [data-testid="stSidebar"] .stCaption p {{
+    color: {P['text']} !important;
+  }}
 
-  /* tab labels */
+  /* ── tabs ── */
+  .stTabs [data-baseweb="tab-list"] {{
+    background: transparent !important;
+  }}
   .stTabs [data-baseweb="tab"] {{
     font-size: 0.68rem !important;
     letter-spacing: 1.5px !important;
     padding: 6px 14px !important;
+    background: transparent !important;
+    color: {P['dim']} !important;
+  }}
+  .stTabs [aria-selected="true"] {{
+    color: {P['text']} !important;
+    border-bottom-color: {P['dune']} !important;
   }}
 
-  /* dataframe */
+  /* ── dividers ── */
+  hr {{
+    border-color: {P['card_rule']} !important;
+    opacity: 1 !important;
+  }}
+
+  /* ── info box ── */
+  [data-testid="stInfo"] {{
+    background: {P['info_bg']} !important;
+    border-color: {P['cyan']} !important;
+  }}
+  [data-testid="stInfo"] p {{
+    color: {P['text']} !important;
+  }}
+
+  /* ── expander ── */
+  [data-testid="stExpander"] {{
+    border-color: {P['card_rule']} !important;
+    background: transparent !important;
+  }}
+  [data-testid="stExpander"] summary {{
+    color: {P['text']} !important;
+  }}
+
+  /* ── dataframe ── */
   [data-testid="stDataFrame"] {{ font-size: 0.78rem !important; }}
+
+  /* ── toggle / slider labels ── */
+  [data-testid="stToggleLabel"] p,
+  [data-testid="stSliderLabel"] p,
+  [data-testid="stSelectSliderLabel"] p {{
+    color: {P['text']} !important;
+  }}
 </style>
-""", unsafe_allow_html=True)
+"""
+
+st.markdown(build_css(P), unsafe_allow_html=True)
 
 
-def _layout(**kw):
+# ── CHART LAYOUT HELPER ────────────────────────────────────────────────────────
+def _layout(P: dict, **kw) -> dict:
     """Tufte-style Plotly base layout — transparent bg, no gridlines."""
     base = dict(
         plot_bgcolor="rgba(0,0,0,0)",
-        paper_bgcolor=BG_COLOR,
-        font=dict(color="#8a9daf", size=11),
+        paper_bgcolor=P["bg"],
+        font=dict(color=P["chart_font"], size=11),
         legend=dict(
             bgcolor="rgba(0,0,0,0)",
             borderwidth=0,
@@ -112,7 +217,7 @@ def _layout(**kw):
         xaxis=dict(
             showgrid=False,
             showline=True,
-            linecolor=AXIS_COLOR,
+            linecolor=P["axis"],
             linewidth=0.5,
             ticks="",
             tickfont=dict(size=10),
@@ -135,21 +240,15 @@ def load_signals(base_dune: int, base_av: int):
     return fetch_and_calibrate(base_dune_score=base_dune, base_av_score=base_av)
 
 
-# ── HEADER — compact, inline, no wasted vertical space ───────────────────────
-st.markdown(f"""
-<div style='padding: 4px 0 12px; border-bottom: 1px solid #141e2c; margin-bottom: 14px;'>
-  <span style='font-size:1.4rem; font-weight:700; letter-spacing:5px; color:{TEXT_COLOR};'>
-    <span style='color:{DUNE_COLOR}'>DUNE</span>SDAY
-  </span>
-  <span style='color:{DIM_COLOR}; font-size:0.62rem; letter-spacing:3px; margin-left:20px;
-               vertical-align: middle;'>
-    BOX OFFICE MODEL &nbsp;·&nbsp; DEC 18 2026 &nbsp;·&nbsp; LIVE SIGNALS
-  </span>
-</div>
-""", unsafe_allow_html=True)
-
 # ── SIDEBAR ───────────────────────────────────────────────────────────────────
 with st.sidebar:
+    # Theme toggle — top of sidebar, before everything else
+    theme_label = "☀️ Light" if st.session_state.theme == "dark" else "🌙 Dark"
+    if st.button(theme_label, use_container_width=False):
+        st.session_state.theme = "light" if st.session_state.theme == "dark" else "dark"
+        st.rerun()
+
+    st.markdown("---")
     st.markdown("### ⚙️ Model Controls")
 
     st.markdown("**Base Audience Scores**")
@@ -163,8 +262,8 @@ with st.sidebar:
         signals = load_signals(base_dune_aud, base_av_aud)
 
     cal = signals["calibration"]
-    confidence_colors = {"high": "🟢", "medium": "🟡", "low": "🔴"}
-    conf_icon = confidence_colors.get(cal["signal_confidence"], "⚪")
+    confidence_icons = {"high": "🟢", "medium": "🟡", "low": "🔴"}
+    conf_icon = confidence_icons.get(cal["signal_confidence"], "⚪")
 
     st.markdown(f"**{conf_icon} Live Calibration**")
     st.caption(f"Updated: {signals['last_updated']}")
@@ -204,11 +303,11 @@ with st.sidebar:
     st.divider()
     st.markdown("**IMAX Config (Locked)**")
     st.markdown(f"""
-    <div style='font-size:0.75rem; color:{DIM_COLOR}; line-height:1.9;'>
-    Dune exclusive: <b style='color:{DUNE_COLOR}'>Days 1–21</b><br>
-    Dune screens: <b style='color:{DUNE_COLOR}'>400</b><br>
-    Avengers day 1: <b style='color:{AV_COLOR}'>0 screens</b><br>
-    Avengers first IMAX: <b style='color:{AV_COLOR}'>Jan 8</b>
+    <div style='font-size:0.75rem; color:{P['dim']}; line-height:1.9;'>
+    Dune exclusive: <b style='color:{P['dune']}'>Days 1–21</b><br>
+    Dune screens: <b style='color:{P['dune']}'>400</b><br>
+    Avengers day 1: <b style='color:{P['av']}'>0 screens</b><br>
+    Avengers first IMAX: <b style='color:{P['av']}'>Jan 8</b>
     </div>
     """, unsafe_allow_html=True)
 
@@ -223,16 +322,29 @@ with st.spinner("Running Monte Carlo..."):
     imax = imax_gap_summary()
 
 
+# ── HEADER ────────────────────────────────────────────────────────────────────
+st.markdown(f"""
+<div style='padding:4px 0 12px; border-bottom:1px solid {P['card_rule']}; margin-bottom:14px;'>
+  <span style='font-size:1.4rem; font-weight:700; letter-spacing:5px; color:{P['text']};'>
+    <span style='color:{P['dune']}'>DUNE</span>SDAY
+  </span>
+  <span style='color:{P['dim']}; font-size:0.62rem; letter-spacing:3px; margin-left:20px;
+               vertical-align:middle;'>
+    BOX OFFICE MODEL &nbsp;·&nbsp; DEC 18 2026 &nbsp;·&nbsp; LIVE SIGNALS
+  </span>
+</div>
+""", unsafe_allow_html=True)
+
+
 # ── KPI ROW ───────────────────────────────────────────────────────────────────
-st.markdown(f"<p style='font-size:0.58rem; letter-spacing:2.5px; color:{DIM_COLOR}; margin:4px 0 8px;'>VERDICT — BOTH HOLDING DEC 18</p>",
+st.markdown(f"<p style='font-size:0.58rem; letter-spacing:2.5px; color:{P['dim']}; margin:4px 0 8px;'>VERDICT — BOTH HOLDING DEC 18</p>",
             unsafe_allow_html=True)
 
 k1, k2, k3, k4, k5, k6 = st.columns(6)
 sc_a = results["A_Both_Hold"]
 
 with k1:
-    st.metric("Dune P50 Profit", f"${sc_a['DUNE']['p50']:.0f}M",
-              delta="100% break-even")
+    st.metric("Dune P50 Profit", f"${sc_a['DUNE']['p50']:.0f}M", delta="100% break-even")
 with k2:
     st.metric("Avengers P50 Profit", f"${sc_a['AVENGERS']['p50']:.0f}M",
               delta=f"{sc_a['AVENGERS']['breakeven_pct']:.0f}% BE")
@@ -247,14 +359,16 @@ with k6:
 
 st.divider()
 
+
 # ── TABS ──────────────────────────────────────────────────────────────────────
 tab1, tab2, tab3, tab4, tab5 = st.tabs([
     "SCENARIOS", "IMAX TIMELINE", "LIVE SIGNALS", "DISTRIBUTIONS", "DISNEY DECISION",
 ])
 
+
 # ── TAB 1: SCENARIOS ──────────────────────────────────────────────────────────
 with tab1:
-    st.markdown(f"<p style='font-size:0.58rem; letter-spacing:2px; color:{DIM_COLOR}; margin-bottom:10px;'>NET PROFIT BY SCENARIO — P10 / P50 / P90</p>",
+    st.markdown(f"<p style='font-size:0.58rem; letter-spacing:2px; color:{P['dim']}; margin-bottom:10px;'>NET PROFIT BY SCENARIO — P10 / P50 / P90</p>",
                 unsafe_allow_html=True)
 
     sk_list   = list(SCENARIOS.keys())
@@ -269,35 +383,32 @@ with tab1:
     fig = go.Figure()
     fig.add_trace(go.Bar(
         name="Dune", x=sc_labels, y=dune_p50s,
-        marker_color=DUNE_COLOR, offsetgroup=0,
+        marker_color=P["dune"], offsetgroup=0,
         text=[f"${v:.0f}M" for v in dune_p50s],
         textposition="outside",
-        textfont=dict(size=10, color=DUNE_COLOR),
+        textfont=dict(size=10, color=P["dune"]),
         error_y=dict(
             type="data", symmetric=False,
             array=[p90 - p50 for p90, p50 in zip(dune_p90s, dune_p50s)],
             arrayminus=[p50 - p10 for p50, p10 in zip(dune_p50s, dune_p10s)],
-            color=DUNE_COLOR, thickness=1.5, width=5,
+            color=P["dune"], thickness=1.5, width=5,
         ),
     ))
     fig.add_trace(go.Bar(
         name="Avengers", x=sc_labels, y=av_p50s,
-        marker_color=AV_COLOR, offsetgroup=1,
+        marker_color=P["av"], offsetgroup=1,
         text=[f"${v:.0f}M" for v in av_p50s],
         textposition="outside",
-        textfont=dict(size=10, color=AV_COLOR),
+        textfont=dict(size=10, color=P["av"]),
         error_y=dict(
             type="data", symmetric=False,
             array=[p90 - p50 for p90, p50 in zip(av_p90s, av_p50s)],
             arrayminus=[p50 - p10 for p50, p10 in zip(av_p50s, av_p10s)],
-            color=AV_COLOR, thickness=1.5, width=5,
+            color=P["av"], thickness=1.5, width=5,
         ),
     ))
-    fig.add_hline(y=0, line_width=0.5, line_color=AXIS_COLOR)
-    fig.update_layout(**_layout(
-        barmode="group", height=390,
-        yaxis_title="Net Profit ($M)",
-    ))
+    fig.add_hline(y=0, line_width=0.5, line_color=P["axis"])
+    fig.update_layout(**_layout(P, barmode="group", height=390, yaxis_title="Net Profit ($M)"))
     st.plotly_chart(fig, use_container_width=True)
 
     rows = []
@@ -316,7 +427,7 @@ with tab1:
 
 # ── TAB 2: IMAX TIMELINE ──────────────────────────────────────────────────────
 with tab2:
-    st.markdown(f"<p style='font-size:0.58rem; letter-spacing:2px; color:{DIM_COLOR}; margin-bottom:10px;'>IMAX SCREEN ALLOCATION — DAYS 1–45</p>",
+    st.markdown(f"<p style='font-size:0.58rem; letter-spacing:2px; color:{P['dim']}; margin-bottom:10px;'>IMAX SCREEN ALLOCATION — DAYS 1–45</p>",
                 unsafe_allow_html=True)
 
     days        = np.arange(45)
@@ -332,26 +443,26 @@ with tab2:
         vertical_spacing=0.14,
     )
     fig2.add_trace(go.Bar(x=date_labels, y=dune_screens,
-                          name="Dune", marker_color=DUNE_COLOR), row=1, col=1)
+                          name="Dune", marker_color=P["dune"]), row=1, col=1)
     fig2.add_trace(go.Bar(x=date_labels, y=av_screens,
-                          name="Avengers", marker_color=AV_COLOR), row=1, col=1)
+                          name="Avengers", marker_color=P["av"]), row=1, col=1)
     fig2.add_trace(go.Scatter(
         x=date_labels, y=imax["dune_daily"],
         name="Dune IMAX rev",
-        line=dict(color=DUNE_COLOR, width=2),
-        fill="tozeroy", fillcolor=f"rgba(212,160,48,0.12)",
+        line=dict(color=P["dune"], width=2),
+        fill="tozeroy", fillcolor=P["fill_dune"],
     ), row=2, col=1)
     fig2.add_trace(go.Scatter(
         x=date_labels, y=imax["avengers_daily"],
         name="Avengers IMAX rev",
-        line=dict(color=AV_COLOR, width=2),
-        fill="tozeroy", fillcolor=f"rgba(204,32,48,0.10)",
+        line=dict(color=P["av"], width=2),
+        fill="tozeroy", fillcolor=P["fill_av"],
     ), row=2, col=1)
 
     for day, color, label in [
-        (7,  "rgba(255,255,255,0.15)", "Wk 1"),
-        (14, "rgba(255,255,255,0.15)", "Wk 2"),
-        (21, CYAN_COLOR,               "Day 21"),
+        (7,  P["vline_ref"], "Wk 1"),
+        (14, P["vline_ref"], "Wk 2"),
+        (21, P["cyan"],      "Day 21"),
     ]:
         for row in [1, 2]:
             fig2.add_vline(
@@ -363,12 +474,10 @@ with tab2:
                 row=row, col=1,
             )
 
-    fig2.update_layout(**_layout(
-        height=480, barmode="stack",
-        margin=dict(t=32, b=10, l=4, r=8),
-    ))
+    fig2.update_layout(**_layout(P, height=480, barmode="stack",
+                                 margin=dict(t=32, b=10, l=4, r=8)))
     fig2.update_xaxes(tickangle=45, nticks=15, showgrid=False,
-                      showline=True, linecolor=AXIS_COLOR, linewidth=0.5)
+                      showline=True, linecolor=P["axis"], linewidth=0.5)
     fig2.update_yaxes(showgrid=False, showline=False, zeroline=False)
     st.plotly_chart(fig2, use_container_width=True)
 
@@ -382,7 +491,7 @@ with tab2:
 
 # ── TAB 3: LIVE SIGNALS ───────────────────────────────────────────────────────
 with tab3:
-    st.markdown(f"<p style='font-size:0.58rem; letter-spacing:2px; color:{DIM_COLOR}; margin-bottom:10px;'>LIVE SIGNAL DASHBOARD</p>",
+    st.markdown(f"<p style='font-size:0.58rem; letter-spacing:2px; color:{P['dim']}; margin-bottom:10px;'>LIVE SIGNAL DASHBOARD</p>",
                 unsafe_allow_html=True)
 
     conf       = cal["signal_confidence"]
@@ -391,21 +500,25 @@ with tab3:
         "medium": "MEDIUM — partial live data",
         "low":    "LOW — fallback values only",
     }.get(conf, conf)
-    conf_color = {"high": DUNE_COLOR, "medium": "#d48020", "low": AV_COLOR}.get(conf, "#888")
+    conf_color = {
+        "high":   P["dune"],
+        "medium": P["conf_medium"],
+        "low":    P["av"],
+    }.get(conf, P["mid_ref"])
 
     st.markdown(f"""
     <div style='border-left:2px solid {conf_color}; padding:8px 14px; margin-bottom:14px;'>
       <span style='color:{conf_color}; font-size:0.6rem; letter-spacing:2px'>
         SIGNAL CONFIDENCE: {conf_label}
       </span><br>
-      <span style='color:#7a8fa0; font-size:0.82rem'>{cal.get("notes", "")}</span>
+      <span style='color:{P['dim']}; font-size:0.82rem'>{cal.get("notes", "")}</span>
     </div>
     """, unsafe_allow_html=True)
 
     col_a, col_b = st.columns(2)
 
     with col_a:
-        st.markdown(f"<span style='color:{AV_COLOR}; font-size:0.82rem; font-weight:600; letter-spacing:2px;'>AVENGERS: DOOMSDAY</span>",
+        st.markdown(f"<span style='color:{P['av']}; font-size:0.82rem; font-weight:600; letter-spacing:2px;'>AVENGERS: DOOMSDAY</span>",
                     unsafe_allow_html=True)
 
         av_sig  = signals["avengers"]
@@ -416,31 +529,32 @@ with tab3:
             fig_d = go.Figure()
             fig_d.add_trace(go.Bar(
                 x=labels, y=teasers,
-                marker_color=AV_COLOR,
+                marker_color=P["av"],
                 text=[f"{v:.0f}M" for v in teasers],
                 textposition="outside",
-                textfont=dict(size=10, color=AV_COLOR),
+                textfont=dict(size=10, color=P["av"]),
                 showlegend=False,
             ))
             fig_d.add_trace(go.Scatter(
                 x=labels, y=teasers,
-                line=dict(color=AV_COLOR, dash="dot", width=1),
+                line=dict(color=P["av"], dash="dot", width=1),
                 mode="lines", showlegend=False,
             ))
             t1 = teasers[0]
             fig_d.add_hline(
                 y=t1 * 0.77, line_dash="dash", line_width=0.8,
-                line_color=DUNE_COLOR, opacity=0.7,
+                line_color=P["dune"], opacity=0.8,
                 annotation_text="D&W held 77%",
-                annotation_font_color=DUNE_COLOR, annotation_font_size=9,
+                annotation_font_color=P["dune"], annotation_font_size=9,
             )
             fig_d.add_hline(
                 y=t1 * 0.47, line_dash="dash", line_width=0.8,
-                line_color="#667788", opacity=0.6,
+                line_color=P["mid_ref"], opacity=0.8,
                 annotation_text="L&T soft 47%",
-                annotation_font_color="#667788", annotation_font_size=9,
+                annotation_font_color=P["mid_ref"], annotation_font_size=9,
             )
             fig_d.update_layout(**_layout(
+                P,
                 title=dict(text="Teaser Decay — X/Twitter Views", font=dict(size=11), x=0),
                 height=260, yaxis_title="Views (M)",
             ))
@@ -456,13 +570,17 @@ with tab3:
 
         if len(teasers) >= 2:
             decay_signal = cal.get("teaser_decay_signal", "neutral")
-            decay_color  = {"strong": DUNE_COLOR, "neutral": "#667788", "soft": AV_COLOR}.get(decay_signal, "#667788")
+            decay_color  = {
+                "strong":  P["dune"],
+                "neutral": P["mid_ref"],
+                "soft":    P["av"],
+            }.get(decay_signal, P["mid_ref"])
             st.markdown(f"""
             <div style='border-left:2px solid {decay_color}; padding:7px 12px; margin-top:8px;'>
               <span style='color:{decay_color}; font-size:0.6rem; letter-spacing:2px'>
                 DECAY: {decay_signal.upper()}
               </span><br>
-              <span style='color:#5a6e80; font-size:0.76rem'>
+              <span style='color:{P['dim']}; font-size:0.76rem'>
                 T1→T2: {teasers[0]:.0f}M → {teasers[1]:.0f}M
                 ({(teasers[1]/teasers[0]*100):.0f}% of T1)
                 {'— matches Love&Thunder pattern' if (teasers[1]/teasers[0]) < 0.55 else '— tracking neutral'}
@@ -471,7 +589,7 @@ with tab3:
             """, unsafe_allow_html=True)
 
     with col_b:
-        st.markdown(f"<span style='color:{DUNE_COLOR}; font-size:0.82rem; font-weight:600; letter-spacing:2px;'>DUNE: PART THREE</span>",
+        st.markdown(f"<span style='color:{P['dune']}; font-size:0.82rem; font-weight:600; letter-spacing:2px;'>DUNE: PART THREE</span>",
                     unsafe_allow_html=True)
 
         dune_sig = signals["dune"]
@@ -491,7 +609,7 @@ with tab3:
         fig_ratio.add_trace(go.Bar(
             x=["Search Interest Share"],
             y=[av_t / total_t * 100],
-            name="Avengers", marker_color=AV_COLOR,
+            name="Avengers", marker_color=P["av"],
             text=[f"Avengers {av_t / total_t * 100:.0f}%"],
             textposition="inside",
             textfont=dict(size=10, color="white"),
@@ -499,28 +617,25 @@ with tab3:
         fig_ratio.add_trace(go.Bar(
             x=["Search Interest Share"],
             y=[dune_t / total_t * 100],
-            name="Dune", marker_color=DUNE_COLOR,
+            name="Dune", marker_color=P["dune"],
             text=[f"Dune {dune_t / total_t * 100:.0f}%"],
             textposition="inside",
-            textfont=dict(size=10, color="#1a1000"),
+            textfont=dict(size=10, color=P["bg"]),
         ))
         fig_ratio.add_hline(
             y=18, line_dash="dot", line_width=0.8,
-            line_color=DUNE_COLOR, opacity=0.6,
+            line_color=P["dune"], opacity=0.7,
             annotation_text="Expected Dune baseline (no trailer)",
-            annotation_font_color=DUNE_COLOR, annotation_font_size=9,
+            annotation_font_color=P["dune"], annotation_font_size=9,
         )
-        fig_ratio.update_layout(**_layout(
-            barmode="stack", height=180,
-            yaxis_title="%",
-        ))
+        fig_ratio.update_layout(**_layout(P, barmode="stack", height=180, yaxis_title="%"))
         st.plotly_chart(fig_ratio, use_container_width=True)
 
         st.caption("Dune's 13/100 vs Avengers 72/100 is marketing stage, not demand. "
                    "Dune has released zero promotional materials.")
 
     st.divider()
-    st.markdown(f"<p style='font-size:0.58rem; letter-spacing:2px; color:{DIM_COLOR};'>HOW SIGNALS FEED THE MODEL</p>",
+    st.markdown(f"<p style='font-size:0.58rem; letter-spacing:2px; color:{P['dim']};'>HOW SIGNALS FEED THE MODEL</p>",
                 unsafe_allow_html=True)
 
     rows_sig = [
@@ -558,7 +673,7 @@ with tab3:
 
 # ── TAB 4: DISTRIBUTIONS ──────────────────────────────────────────────────────
 with tab4:
-    st.markdown(f"<p style='font-size:0.58rem; letter-spacing:2px; color:{DIM_COLOR}; margin-bottom:10px;'>NET PROFIT DISTRIBUTIONS — SCENARIO A (BOTH HOLD)</p>",
+    st.markdown(f"<p style='font-size:0.58rem; letter-spacing:2px; color:{P['dim']}; margin-bottom:10px;'>NET PROFIT DISTRIBUTIONS — SCENARIO A (BOTH HOLD)</p>",
                 unsafe_allow_html=True)
 
     dune_profits = results["A_Both_Hold"]["DUNE"]["profits"]
@@ -566,8 +681,8 @@ with tab4:
 
     fig4 = go.Figure()
     for profits, name, color in [
-        (dune_profits, "Dune",     DUNE_COLOR),
-        (av_profits,   "Avengers", AV_COLOR),
+        (dune_profits, "Dune",     P["dune"]),
+        (av_profits,   "Avengers", P["av"]),
     ]:
         fig4.add_trace(go.Histogram(
             x=profits, nbinsx=60, name=name,
@@ -582,12 +697,12 @@ with tab4:
         )
 
     fig4.add_vline(
-        x=0, line_width=0.5, line_color=AXIS_COLOR,
+        x=0, line_width=0.5, line_color=P["axis"],
         annotation_text="Break-even",
-        annotation_font_color="#667788", annotation_font_size=9,
+        annotation_font_color=P["mid_ref"], annotation_font_size=9,
     )
     fig4.update_layout(**_layout(
-        barmode="overlay", height=380,
+        P, barmode="overlay", height=380,
         xaxis_title="Net Profit ($M)", yaxis_title="Probability Density",
     ))
     st.plotly_chart(fig4, use_container_width=True)
@@ -607,7 +722,7 @@ with tab4:
 
 # ── TAB 5: DISNEY DECISION ────────────────────────────────────────────────────
 with tab5:
-    st.markdown(f"<p style='font-size:0.58rem; letter-spacing:2px; color:{DIM_COLOR}; margin-bottom:10px;'>SHOULD DISNEY MOVE? — DECISION FRAMEWORK</p>",
+    st.markdown(f"<p style='font-size:0.58rem; letter-spacing:2px; color:{P['dim']}; margin-bottom:10px;'>SHOULD DISNEY MOVE? — DECISION FRAMEWORK</p>",
                 unsafe_allow_html=True)
 
     sc_a_av = results["A_Both_Hold"]["AVENGERS"]["p50"]
@@ -627,7 +742,7 @@ with tab5:
     prob_data = {
         "Window":      ["Now → Apr 12", "CinemaCon Apr 13–20", "Apr 21 – Jul 1", "Jul 1+", "Never"],
         "Probability": [8, 35, 15, 4, 38],
-        "Trigger":     [
+        "Trigger": [
             "Reshoot crisis",
             "Trailer underperforms + exhibitor pressure",
             "Dune trailer is a phenomenon",
@@ -635,25 +750,26 @@ with tab5:
             "Hold Dec 18, absorb IMAX hit, own Dunesday narrative",
         ],
     }
+
+    # gradient: av red → amber → dune gold, encoding urgency
+    bar_colors = [P["av"], "#c05020", "#a07020", "#706040", P["dune"]]
     fig5 = go.Figure(go.Bar(
         x=prob_data["Window"],
         y=prob_data["Probability"],
-        marker_color=[AV_COLOR, "#d44020", "#c07010", "#804020", DUNE_COLOR],
+        marker_color=bar_colors,
         text=[f"{p}%" for p in prob_data["Probability"]],
         textposition="outside",
-        textfont=dict(size=11),
+        textfont=dict(size=11, color=P["chart_font"]),
     ))
-    fig5.add_hline(y=0, line_width=0.5, line_color=AXIS_COLOR)
-    fig5.update_layout(**_layout(
-        height=280, yaxis_title="%", yaxis_range=[0, 50],
-    ))
+    fig5.add_hline(y=0, line_width=0.5, line_color=P["axis"])
+    fig5.update_layout(**_layout(P, height=280, yaxis_title="%", yaxis_range=[0, 50]))
     st.plotly_chart(fig5, use_container_width=True)
     st.dataframe(pd.DataFrame(prob_data), use_container_width=True, hide_index=True)
 
     st.divider()
     st.markdown(f"""
     <div class='verdict-box'>
-    <b style='color:{DUNE_COLOR}'>This is Walden & D'Amaro's first major theatrical decision together.</b><br><br>
+    <b style='color:{P['dune']}'>This is Walden & D'Amaro's first major theatrical decision together.</b><br><br>
     The model sets the floor — financial stakes are quantified. Everything above the floor is
     judgment, franchise strategy, competitive psychology, and institutional ego.<br><br>
     <b>What holding says:</b> We trust the franchise. Marvel doesn't blink.<br>
@@ -661,7 +777,7 @@ with tab5:
     The trailer is the permission structure. If it hits → hold. If it lands soft →
     the move conversation becomes real. <b>CinemaCon April 16 is the decision point.</b>
     <br><br>
-    <span style='color:{DIM_COLOR}; font-size:0.78rem'>
+    <span style='color:{P['dim']}; font-size:0.78rem'>
     Live signals: {' · '.join(cal['sources'])}
     </span>
     </div>
@@ -670,7 +786,8 @@ with tab5:
 
 # ── FOOTER ────────────────────────────────────────────────────────────────────
 st.markdown(f"""
-<p style='color:#1e3048; font-size:0.6rem; letter-spacing:1.5px; margin-top:12px; text-align:right;'>
+<p style='color:{P['footer']}; font-size:0.6rem; letter-spacing:1.5px;
+   margin-top:12px; text-align:right;'>
 DUNESDAY v5 &nbsp;·&nbsp; {signals['last_updated']} &nbsp;·&nbsp; {' · '.join(cal['sources'])}
 </p>
 """, unsafe_allow_html=True)
