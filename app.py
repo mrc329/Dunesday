@@ -66,12 +66,15 @@ PALETTES: dict[str, dict] = {
 }
 
 # ── THEME STATE — must init before any widget ──────────────────────────────────
+# We use JS-based OS detection: JS reads prefers-color-scheme and sets ?sys_theme=
+# in the URL on first load so Python can read the real system preference.
+_qs_theme = st.query_params.get("sys_theme", "")
+
 if "theme" not in st.session_state:
-    try:
-        _base = st.get_option("theme.base")
-        st.session_state.theme = "light" if _base == "light" else "dark"
-    except Exception:
-        st.session_state.theme = "dark"
+    if _qs_theme in ("light", "dark"):
+        st.session_state.theme = _qs_theme
+    else:
+        st.session_state.theme = "light"   # Tufte light as safe default
 
 P = PALETTES[st.session_state.theme]
 
@@ -201,6 +204,23 @@ def build_css(P: dict) -> str:
 
 st.markdown(build_css(P), unsafe_allow_html=True)
 
+# ── OS THEME DETECTION (runs once on first load, before sys_theme param is set) ─
+# Reads the browser's prefers-color-scheme and redirects with ?sys_theme=<value>
+# so the Python side can set session state to match the user's OS preference.
+if not _qs_theme:
+    import streamlit.components.v1 as _cv1
+    _cv1.html("""<script>
+    (function() {
+        var dark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+        var t = dark ? 'dark' : 'light';
+        var u = new URL(window.parent.location.href);
+        if (u.searchParams.get('sys_theme') !== t) {
+            u.searchParams.set('sys_theme', t);
+            window.parent.location.replace(u.toString());
+        }
+    })();
+    </script>""", height=0, scrolling=False)
+
 
 # ── CHART LAYOUT HELPER ────────────────────────────────────────────────────────
 def _layout(P: dict, **kw) -> dict:
@@ -249,7 +269,9 @@ with st.sidebar:
     # Theme toggle — top of sidebar, before everything else
     theme_label = "☀️ Light" if st.session_state.theme == "dark" else "🌙 Dark"
     if st.button(theme_label, use_container_width=False):
-        st.session_state.theme = "light" if st.session_state.theme == "dark" else "dark"
+        new_theme = "light" if st.session_state.theme == "dark" else "dark"
+        st.session_state.theme = new_theme
+        st.query_params["sys_theme"] = new_theme
         st.rerun()
 
     st.markdown("---")
