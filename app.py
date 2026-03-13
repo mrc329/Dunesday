@@ -67,7 +67,11 @@ PALETTES: dict[str, dict] = {
 
 # ── THEME STATE — must init before any widget ──────────────────────────────────
 if "theme" not in st.session_state:
-    st.session_state.theme = "dark"
+    try:
+        _base = st.get_option("theme.base")
+        st.session_state.theme = "light" if _base == "light" else "dark"
+    except Exception:
+        st.session_state.theme = "dark"
 
 P = PALETTES[st.session_state.theme]
 
@@ -459,19 +463,31 @@ with tab2:
         fill="tozeroy", fillcolor=P["fill_av"],
     ), row=2, col=1)
 
+    # add_vline with string (categorical) x-axes triggers a Plotly bug in newer
+    # versions: annotation positioning calls _mean([str, str]) which raises
+    # TypeError.  Use add_shape + add_annotation instead.
     for day, color, label in [
         (7,  P["vline_ref"], "Wk 1"),
         (14, P["vline_ref"], "Wk 2"),
         (21, P["cyan"],      "Day 21"),
     ]:
-        for row in [1, 2]:
-            fig2.add_vline(
-                x=date_labels[day], line_dash="dot",
-                line_color=color, line_width=0.8,
-                annotation_text=label if row == 1 else "",
-                annotation_font_color=color,
-                annotation_font_size=9,
-                row=row, col=1,
+        x_val = date_labels[day]
+        for xref, yref in [("x", "y domain"), ("x2", "y2 domain")]:
+            fig2.add_shape(
+                type="line",
+                x0=x_val, x1=x_val, y0=0, y1=1,
+                xref=xref, yref=yref,
+                line=dict(dash="dot", color=color, width=0.8),
+            )
+        if label:
+            fig2.add_annotation(
+                x=x_val, y=1,
+                xref="x", yref="y domain",
+                text=label,
+                font=dict(color=color, size=9),
+                showarrow=False,
+                yanchor="bottom",
+                xanchor="center",
             )
 
     fig2.update_layout(**_layout(P, height=480, barmode="stack",
