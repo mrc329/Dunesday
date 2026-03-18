@@ -819,10 +819,17 @@ with tab3:
                 unsafe_allow_html=True,
             )
         elif dune_yt_views is not None:
+            _dune_ratio_pct = f"{_dune_eng_ratio * 100:.2f}%" if _dune_eng_ratio else "—"
+            _dune_likes_str = f" · {_dune_likes:,} likes" if _dune_likes else ""
+            _ratio_str = (
+                f" · like/view ratio <b style='color:{dune_color}'>{_dune_ratio_pct}</b>"
+                if _dune_eng_ratio else ""
+            )
             st.markdown(
                 f"<div style='border-left:2px solid {dune_color}; padding:8px 14px; "
                 f"font-size:0.82rem; color:{dune_dim};'>"
-                f"Trailer live · <b style='color:{dune_color}'>{dune_yt_views:.0f}M</b> YouTube views</div>",
+                f"Trailer live · <b style='color:{dune_color}'>{dune_yt_views:.0f}M</b> views"
+                f"{_dune_likes_str}{_ratio_str}</div>",
                 unsafe_allow_html=True,
             )
         else:
@@ -892,14 +899,16 @@ with tab3:
             label = _YT_SLOT_LABELS.get(slot, slot)
             if vid_id in yt_videos:
                 vd = yt_videos[vid_id]
+                _ratio = vd["likes"] / vd["views"] if vd.get("views") else None
                 yt_rows.append({
-                    "Video":  label,
-                    "Title":  vd["title"][:60] + ("…" if len(vd["title"]) > 60 else ""),
-                    "Views":  f"{vd['views'] / 1_000_000:.1f}M",
-                    "Likes":  f"{vd['likes'] / 1_000:.0f}K",
+                    "Video":        label,
+                    "Title":        vd["title"][:60] + ("…" if len(vd["title"]) > 60 else ""),
+                    "Views":        f"{vd['views'] / 1_000_000:.1f}M",
+                    "Likes":        f"{vd['likes'] / 1_000:.0f}K",
+                    "Like/View %":  f"{_ratio * 100:.2f}%" if _ratio else "—",
                 })
             else:
-                yt_rows.append({"Video": label, "Title": "—", "Views": "—", "Likes": "—"})
+                yt_rows.append({"Video": label, "Title": "—", "Views": "—", "Likes": "—", "Like/View %": "—"})
 
         st.dataframe(pd.DataFrame(yt_rows), use_container_width=True, hide_index=True)
 
