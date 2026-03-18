@@ -676,7 +676,7 @@ with tab3:
     col_a, col_b = st.columns(2)
 
     with col_a:
-        st.markdown(f"<span style='color:{P['av']}; font-size:0.82rem; font-weight:600; letter-spacing:2px;'>AVENGERS: DOOMSDAY</span>",
+        st.markdown(f"<div style='color:{P['av']}; font-size:0.9rem; font-weight:700; letter-spacing:2px; margin-bottom:10px; padding-bottom:4px; border-bottom:1px solid {P[\"av\"]};'>AVENGERS: DOOMSDAY</div>",
                     unsafe_allow_html=True)
 
         if teasers:
@@ -745,15 +745,6 @@ with tab3:
                       f"{av_sig['yt_trailer_views']:,}" if av_sig.get("yt_trailer_views") else "—",
                       delta="Full trailer not released" if not av_sig.get("full_trailer_out") else "Live")
 
-        if av_sig.get("reddit_hot_avg") is not None or av_sig.get("reddit_posts_24h") is not None:
-            r1, r2 = st.columns(2)
-            r1.metric("r/marvelstudios hot avg",
-                      f"{av_sig['reddit_hot_avg']:,.0f}" if av_sig.get("reddit_hot_avg") is not None else "—",
-                      delta="Upvote velocity")
-            r2.metric("r/marvelstudios posts/24h",
-                      str(av_sig["reddit_posts_24h"]) if av_sig.get("reddit_posts_24h") is not None else "—",
-                      delta="Post volume")
-
         if len(teasers) >= 2 and teasers[0] > 0:
             decay_signal = cal.get("teaser_decay_signal", "neutral")
             decay_color  = {
@@ -776,7 +767,7 @@ with tab3:
             """, unsafe_allow_html=True)
 
     with col_b:
-        st.markdown(f"<span style='color:{P['dune']}; font-size:0.82rem; font-weight:600; letter-spacing:2px;'>DUNE: PART THREE</span>",
+        st.markdown(f"<div style='color:{P['dune']}; font-size:0.9rem; font-weight:700; letter-spacing:2px; margin-bottom:10px; padding-bottom:4px; border-bottom:1px solid {P[\"dune\"]};'>DUNE: PART THREE</div>",
                     unsafe_allow_html=True)
 
         dune_yt_views = _yt_views_M("dune_t1")
@@ -797,14 +788,6 @@ with tab3:
                   f"{dune_sig.get('trends_interest', '—')}/100",
                   delta=f"vs Avengers {av_sig.get('trends_interest', '?')}/100")
         m2.metric("Alamo poll", "#1 Most Anticipated", delta="14,000 respondents")
-
-        r1, r2 = st.columns(2)
-        r1.metric("r/dune hot avg",
-                  f"{dune_sig['reddit_hot_avg']:,.0f}" if dune_sig.get("reddit_hot_avg") is not None else "—",
-                  delta="Upvote velocity")
-        r2.metric("r/dune posts/24h",
-                  str(dune_sig["reddit_posts_24h"]) if dune_sig.get("reddit_posts_24h") is not None else "—",
-                  delta="Post volume")
 
         av_t    = av_sig.get("trends_interest", 72)
         dune_t  = dune_sig.get("trends_interest", 13)
@@ -977,14 +960,6 @@ with tab3:
          f"✓ {teaser_src}"],
         ["YouTube API", "Official trailer views", yt_row_val,
          "Feeds teaser decay + audience score calibration", yt_row_status],
-        ["Reddit API",
-         "Post volume + upvote velocity",
-         f"r/marvelstudios {av_sig.get('reddit_hot_avg') or '—'} avg / "
-         f"r/dune {dune_sig.get('reddit_hot_avg') or '—'} avg"
-         if signals.get("source") == "live" else "—",
-         "±3 pts max (score avg + post volume)",
-         "✓ Live" if signals.get("avengers", {}).get("reddit_hot_avg") is not None
-         else "⚠ Key needed"],
         ["Fandango presales", "Purchase intent", "Not open yet",
          "Opens Sept 2026", "⏳ Pending"],
     ]
@@ -1007,22 +982,6 @@ with tab3:
             on every page load and feed the audience score calibration.
             """)
 
-    with st.expander("🔑 Set up Reddit API credentials (5 min)"):
-        st.markdown("""
-        1. Go to [reddit.com/prefs/apps](https://www.reddit.com/prefs/apps)
-        2. Click **"create another app"** → select type **"script"**
-        3. Name it (e.g. `DunesdaySignals`), set redirect URI to `http://localhost:8080`
-        4. Copy the **client_id** (14-char string under the app name) and **client_secret**
-        5. In Streamlit Cloud: App Settings → Secrets → add:
-        ```toml
-        REDDIT_CLIENT_ID     = "your-client-id"
-        REDDIT_CLIENT_SECRET = "your-client-secret"
-        ```
-        Once added, post volume (24h new posts) and upvote velocity
-        (top-25 hot post average score) from r/marvelstudios and r/dune
-        will update on every page load. No Reddit account required — the
-        app uses OAuth client credentials only.
-        """)
 
 
 # ── TAB 4: DISTRIBUTIONS ──────────────────────────────────────────────────────
