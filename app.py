@@ -676,7 +676,8 @@ with tab3:
     col_a, col_b = st.columns(2)
 
     with col_a:
-        st.markdown(f"<div style='color:{P['av']}; font-size:0.9rem; font-weight:700; letter-spacing:2px; margin-bottom:10px; padding-bottom:4px; border-bottom:1px solid {P[\"av\"]};'>AVENGERS: DOOMSDAY</div>",
+        _av_color = P["av"]
+        st.markdown(f"<div style='color:{_av_color}; font-size:0.9rem; font-weight:700; letter-spacing:2px; margin-bottom:10px; padding-bottom:4px; border-bottom:1px solid {_av_color};'>AVENGERS: DOOMSDAY</div>",
                     unsafe_allow_html=True)
 
         if teasers:
@@ -725,11 +726,6 @@ with tab3:
             ))
             st.plotly_chart(fig_d, use_container_width=True)
 
-        m1, m2 = st.columns(2)
-        m1.metric("Trends interest",
-                  f"{av_sig.get('trends_interest', '—')}/100",
-                  delta="Google Trends US")
-
         # YouTube total views across all 4 teasers
         if yt_live:
             av_yt_total = sum(
@@ -737,11 +733,11 @@ with tab3:
                 for s in _AV_TEASER_SLOTS
                 if YOUTUBE_VIDEO_IDS.get(s) and YOUTUBE_VIDEO_IDS[s] in yt_videos
             )
-            m2.metric("YT teaser views",
+            st.metric("YT teaser views",
                       f"{av_yt_total / 1_000_000:.0f}M" if av_yt_total else "—",
                       delta=f"T1–T4 combined · {yt_fetched[:10]}")
         else:
-            m2.metric("YT trailer views",
+            st.metric("YT trailer views",
                       f"{av_sig['yt_trailer_views']:,}" if av_sig.get("yt_trailer_views") else "—",
                       delta="Full trailer not released" if not av_sig.get("full_trailer_out") else "Live")
 
@@ -767,7 +763,8 @@ with tab3:
             """, unsafe_allow_html=True)
 
     with col_b:
-        st.markdown(f"<div style='color:{P['dune']}; font-size:0.9rem; font-weight:700; letter-spacing:2px; margin-bottom:10px; padding-bottom:4px; border-bottom:1px solid {P[\"dune\"]};'>DUNE: PART THREE</div>",
+        _dune_color = P["dune"]
+        st.markdown(f"<div style='color:{_dune_color}; font-size:0.9rem; font-weight:700; letter-spacing:2px; margin-bottom:10px; padding-bottom:4px; border-bottom:1px solid {_dune_color};'>DUNE: PART THREE</div>",
                     unsafe_allow_html=True)
 
         dune_yt_views = _yt_views_M("dune_t1")
@@ -783,44 +780,7 @@ with tab3:
         else:
             st.info("No trailer released. WB following Part Two marketing cadence — strategic delay.")
 
-        m1, m2 = st.columns(2)
-        m1.metric("Trends interest",
-                  f"{dune_sig.get('trends_interest', '—')}/100",
-                  delta=f"vs Avengers {av_sig.get('trends_interest', '?')}/100")
-        m2.metric("Alamo poll", "#1 Most Anticipated", delta="14,000 respondents")
-
-        av_t    = av_sig.get("trends_interest", 72)
-        dune_t  = dune_sig.get("trends_interest", 13)
-        total_t = av_t + dune_t or 1
-
-        fig_ratio = go.Figure()
-        fig_ratio.add_trace(go.Bar(
-            x=["Search Interest Share"],
-            y=[av_t / total_t * 100],
-            name="Avengers", marker_color=P["av"],
-            text=[f"Avengers {av_t / total_t * 100:.0f}%"],
-            textposition="inside",
-            textfont=dict(size=10, color="white"),
-        ))
-        fig_ratio.add_trace(go.Bar(
-            x=["Search Interest Share"],
-            y=[dune_t / total_t * 100],
-            name="Dune", marker_color=P["dune"],
-            text=[f"Dune {dune_t / total_t * 100:.0f}%"],
-            textposition="inside",
-            textfont=dict(size=10, color=P["bg"]),
-        ))
-        fig_ratio.add_hline(
-            y=18, line_dash="dot", line_width=0.8,
-            line_color=P["dune"], opacity=0.7,
-            annotation_text="Expected Dune baseline (no trailer)",
-            annotation_font_color=P["dune"], annotation_font_size=9,
-        )
-        fig_ratio.update_layout(**_layout(P, barmode="stack", height=260, yaxis_title="%"))
-        st.plotly_chart(fig_ratio, use_container_width=True)
-
-        st.caption("Dune's 13/100 vs Avengers 72/100 is marketing stage, not demand. "
-                   "Dune has released zero promotional materials.")
+        st.metric("Alamo poll", "#1 Most Anticipated", delta="14,000 respondents")
 
     # ── YouTube per-video stats table ─────────────────────────────────────────
     if yt_live:
@@ -949,10 +909,6 @@ with tab3:
                          else f"⚠ {yt_stats.get('status','unavailable')}")
 
     rows_sig = [
-        ["Google Trends", "Search interest ratio",
-         f"Av {av_t} / Dune {dune_t}",
-         f"Av {cal['avengers_adj']:+.1f}pt / Dune {cal['dune_adj']:+.1f}pt",
-         "✓ Live" if signals.get("source") == "live" else "⚠ Fallback"],
         ["Teaser decay", "T1→T2 view retention",
          f"{teasers[0]:.0f}M → {teasers[1]:.0f}M ({teasers[1]/teasers[0]*100:.0f}%)"
          if len(teasers) >= 2 and teasers[0] > 0 else "—",
