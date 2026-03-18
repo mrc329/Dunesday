@@ -9,7 +9,9 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import datetime
 
-from model.config import FILM_PARAMS, IMAX_CONFIG
+from model.config import (FILM_PARAMS, IMAX_CONFIG,
+                          AUDIENCE_SCORE_BENCHMARKS,
+                          SPIDEY_IMPACT_ADJ, WEEKLY_DECAY_BENCHMARKS)
 from model.core import run_all_scenarios, imax_gap_summary, SCENARIOS
 from model.signals import (fetch_and_calibrate, YOUTUBE_TRAILER_URLS,
                            YOUTUBE_VIDEO_IDS, fetch_youtube_views)
@@ -332,9 +334,23 @@ with st.sidebar:
     st.markdown("### ⚙️ Model Controls")
 
     st.markdown("**Base Audience Scores**")
-    st.caption("Live signals auto-calibrate from these baselines")
+    st.caption(
+        "PostTrak/CinemaScore-style satisfaction index (0–100). "
+        "Live signals auto-calibrate from these baselines."
+    )
     base_dune_aud = st.slider("Dune base score", 60, 100, 87)
     base_av_aud   = st.slider("Avengers base score", 60, 100, 88)
+
+    with st.expander("Score benchmarks"):
+        bm_rows = [
+            {"Film": f"{t} ({yr})", "Score": s,
+             "Film group": g.title()}
+            for t, yr, s, g in sorted(
+                AUDIENCE_SCORE_BENCHMARKS, key=lambda x: -x[2]
+            )
+        ]
+        st.dataframe(pd.DataFrame(bm_rows), hide_index=True,
+                     use_container_width=True)
 
     st.divider()
 
@@ -371,12 +387,28 @@ with st.sidebar:
         st.caption("⚠️ Overriding live calibration")
     else:
         dune_aud = int(cal["dune_calibrated"])
-        av_aud   = int(cal["avengers_calibrated"])
+        # Apply Spider-Man MCU brand signal on top of live calibration
+        av_aud   = int(np.clip(cal["avengers_calibrated"] + spidey_adj, 60, 100))
 
     st.divider()
     st.markdown("**International Multipliers**")
     dune_intl = st.slider("Dune intl mult", 0.8, 2.5, 1.48, 0.05)
     av_intl   = st.slider("Avengers intl mult", 1.0, 3.5, 2.18, 0.05)
+
+    st.markdown("**Competitor Signals**")
+    spidey_tier = st.select_slider(
+        "Spider-Man: Brand New Day (Jul 25 2026)",
+        options=["Disappoints", "Soft", "Neutral", "Strong", "Blockbuster"],
+        value="Neutral",
+    )
+    spidey_adj = SPIDEY_IMPACT_ADJ[spidey_tier]
+    spidey_color = (P["av"] if spidey_adj < 0 else
+                    P["dune"] if spidey_adj > 0 else P["dim"])
+    st.caption(
+        f"MCU brand signal → Avengers score "
+        f"**{spidey_adj:+d} pts** · OW mult "
+        f"{'↑' if spidey_adj > 0 else '↓' if spidey_adj < 0 else '—'}"
+    )
 
     st.markdown("**Simulation**")
     n_trials = st.select_slider("MC trials", [500, 1000, 2000, 5000], value=1000)
@@ -399,6 +431,7 @@ with st.spinner("Running Monte Carlo..."):
         n=n_trials,
         dune_aud=dune_aud, av_aud=av_aud,
         dune_intl=dune_intl, av_intl=av_intl,
+        spidey_tier=spidey_tier,
     )
     imax = imax_gap_summary()
 
@@ -810,6 +843,89 @@ with tab3:
                 yt_rows.append({"Video": label, "Title": "—", "Views": "—", "Likes": "—"})
 
         st.dataframe(pd.DataFrame(yt_rows), use_container_width=True, hide_index=True)
+
+    # ── Avengers Projected Decay Rate ─────────────────────────────────────────
+    st.divider()
+    st.markdown(
+        f"<p style='font-size:0.58rem; letter-spacing:2px; color:{P['dim']};'>"
+        "AVENGERS: PROJECTED WEEKLY HOLD CURVE</p>",
+        unsafe_allow_html=True,
+    )
+
+    wk_labels = ["OW", "Wk 2", "Wk 3", "Wk 4", "Wk 5", "Wk 6", "Wk 7"]
+
+    # Build projected curve from calibrated audience score via WOM
+    from model.core import wom_mult as _wom_mult
+    wm_proj  = float(np.clip(_wom_mult(av_aud), 0.5, 1.5))
+    base_holds = [1.00, 0.56, 0.43, 0.34, 0.27, 0.22, 0.18]
+    proj_holds = [base_holds[0]] + [
+        float(np.clip(h * wm_proj, 0.05, 1.05))
+        for h in base_holds[1:]
+    ]
+    proj_pct = [v * 100 for v in proj_holds]
+
+    fig_decay = go.Figure()
+
+    # Benchmark bands (light, background first)
+    bench_styles = {
+        "Endgame (strong)":    dict(dash="dot",   color=P["dune"],    opacity=0.55),
+        "D&W / held well":     dict(dash="dot",   color=P["dune"],    opacity=0.30),
+        "Neutral MCU":         dict(dash="dash",  color=P["mid_ref"], opacity=0.70),
+        "Love&Thunder (soft)": dict(dash="dot",   color=P["av"],      opacity=0.55),
+    }
+    for bname, bvals in WEEKLY_DECAY_BENCHMARKS.items():
+        sty = bench_styles[bname]
+        fig_decay.add_trace(go.Scatter(
+            x=wk_labels, y=[v * 100 for v in bvals],
+            name=bname,
+            mode="lines",
+            line=dict(dash=sty["dash"], color=sty["color"],
+                      width=1.2),
+            opacity=sty["opacity"],
+        ))
+
+    # Projected curve — prominent
+    fig_decay.add_trace(go.Scatter(
+        x=wk_labels, y=proj_pct,
+        name=f"Projected (score {av_aud})",
+        mode="lines+markers",
+        line=dict(color=P["av"], width=2.5),
+        marker=dict(size=6, color=P["av"]),
+    ))
+
+    # Annotate each projected point
+    for i, (lbl, val) in enumerate(zip(wk_labels, proj_pct)):
+        if i == 0:
+            continue
+        fig_decay.add_annotation(
+            x=lbl, y=val,
+            text=f"{val:.0f}%",
+            font=dict(color=P["av"], size=9),
+            showarrow=False,
+            yanchor="bottom",
+            yshift=6,
+        )
+
+    fig_decay.update_layout(**_layout(
+        P, outside_text=True,
+        height=300,
+        yaxis_title="% of OW gross",
+        yaxis_ticksuffix="%",
+        yaxis_range=[0, 115],
+        legend=dict(bgcolor="rgba(0,0,0,0)", borderwidth=0,
+                    font=dict(size=9), orientation="h", y=1.06, x=0),
+    ))
+    st.plotly_chart(fig_decay, use_container_width=True)
+
+    # Decay delta vs neutral
+    delta_vs_neutral = proj_pct[1] - WEEKLY_DECAY_BENCHMARKS["Neutral MCU"][1] * 100
+    decay_note_color = P["dune"] if delta_vs_neutral >= 0 else P["av"]
+    st.caption(
+        f"Wk 2 hold projected at **{proj_pct[1]:.0f}%** of OW "
+        f"({delta_vs_neutral:+.0f}% vs neutral MCU) "
+        f"· WOM multiplier {wm_proj:.2f}× · audience score {av_aud}"
+        + (f" (incl. Spider-Man {spidey_adj:+d}pt)" if spidey_adj != 0 else "")
+    )
 
     st.divider()
     st.markdown(f"<p style='font-size:0.58rem; letter-spacing:2px; color:{P['dim']};'>HOW SIGNALS FEED THE MODEL</p>",

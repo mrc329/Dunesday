@@ -15,6 +15,7 @@ from model.config import (
     STUDIO_SPLIT, IMAX_CONFIG, FILM_PARAMS,
     WOM_SLOPE, WOM_INTERCEPT,
     HOLIDAY_OVERRIDES, DOW_MULTIPLIERS,
+    SPIDEY_OW_MULT,
 )
 
 
@@ -135,6 +136,7 @@ def run_monte_carlo(
     audience_override: float = None,
     intl_override: float = None,
     imax_cfg: dict = None,
+    spidey_tier: str = "Neutral",
 ) -> dict:
     """
     Monte Carlo simulation for a single film in a single scenario.
@@ -148,6 +150,8 @@ def run_monte_carlo(
     aud_mean  = audience_override if audience_override is not None else p["audience_mean"]
     intl_mean = intl_override     if intl_override     is not None else p["intl_mult_mean"]
     ow_adj    = SCENARIO_OW_ADJ.get((film, scenario_key), 1.0)
+    if film == "AVENGERS":
+        ow_adj *= SPIDEY_OW_MULT.get(spidey_tier, 1.0)
 
     revenues  = []
     imax_revs = []
@@ -246,6 +250,7 @@ def run_all_scenarios(
     av_aud: float = None,
     dune_intl: float = None,
     av_intl: float = None,
+    spidey_tier: str = "Neutral",
 ) -> dict:
     results = {}
     for sk, sc in SCENARIOS.items():
@@ -261,5 +266,6 @@ def run_all_scenarios(
                 audience_override=aud,
                 intl_override=intl,
                 imax_cfg=sc["imax_cfg"],
+                spidey_tier=spidey_tier,
             )
     return results
