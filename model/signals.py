@@ -547,7 +547,4 @@ def _build_notes(av_adj, dune_adj, trends, yt, reddit=None) -> str:
     if not trends:
         notes.append("Google Trends unavailable — using fallback search interest values.")
 
-    if reddit and reddit.get("status") != "ok":
-        notes.append("Add REDDIT_CLIENT_ID and REDDIT_CLIENT_SECRET for live Reddit signals.")
-
     return " ".join(notes)
