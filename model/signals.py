@@ -1,18 +1,21 @@
 """
 model/signals.py
 
-Live signal fetching — Google Trends + YouTube Data API + Reddit API.
+Live signal fetching — YouTube Data API + Wikipedia + TMDB + Trakt.
 Called on every Streamlit page load. Fails gracefully to last
 known values if network is unavailable.
 
-GOOGLE TRENDS: No API key needed. Runs immediately.
 YOUTUBE API:   Set YOUTUBE_API_KEY in Streamlit secrets or .env.
                Returns None gracefully until key is configured.
-REDDIT API:    Set REDDIT_CLIENT_ID and REDDIT_CLIENT_SECRET in
-               Streamlit secrets or .env. Free app registration at
-               reddit.com/prefs/apps (script type, ~5 min setup).
-               Pulls post volume + upvote velocity from r/marvelstudios
-               and r/dune. Returns None gracefully until configured.
+TMDB API:      Set TMDB_API_KEY in Streamlit secrets or .env.
+               Free key at themoviedb.org/settings/api (~2 min).
+               Pulls popularity score + vote count for both films.
+               Set TMDB_MOVIE_IDS below after looking up IDs at
+               themoviedb.org (search film title, copy ID from URL).
+TRAKT API:     Set TRAKT_CLIENT_ID in Streamlit secrets or .env.
+               Free app at trakt.tv/oauth/applications (script type,
+               no redirect URI needed, ~2 min). Pulls watchlist
+               collectors + watcher count — organic demand signal.
 """
 
 import os
@@ -336,6 +339,7 @@ def fetch_wikipedia_pageviews(days: int = 30) -> dict:
 
 
 def calibrate_from_wikipedia(last_7d_views: int, wow_pct: float, film: str) -> float:
+
     """
     Convert Wikipedia pageview data into audience score adjustment.
 
@@ -373,6 +377,183 @@ def calibrate_from_wikipedia(last_7d_views: int, wow_pct: float, film: str) -> f
         mom_adj = 0.0
 
     return float(np.clip(base_adj + mom_adj, -3, 3))
+
+
+# ── TMDB ──────────────────────────────────────────────────────────────────────
+
+# TMDB movie IDs — look up at themoviedb.org (search title, copy integer from URL)
+# e.g. themoviedb.org/movie/693134  →  ID is 693134
+TMDB_MOVIE_IDS = {
+    "avengers": None,   # TODO: set after looking up "Avengers: Doomsday" on TMDB
+    "dune":     None,   # TODO: set after looking up "Dune: Part Three" on TMDB
+}
+
+def fetch_tmdb_signals() -> dict:
+    """
+    Fetch TMDB popularity score + vote count for both films.
+    Requires TMDB_API_KEY in environment or Streamlit secrets.
+
+    TMDB popularity is a rolling composite of:
+      - Page views on TMDB
+      - Watchlist/favourite adds
+      - Vote activity
+    At 9 months out, a score > 200 indicates strong tentpole tracking.
+    """
+    api_key = None
+    try:
+        import streamlit as st
+        api_key = st.secrets.get("TMDB_API_KEY")
+    except Exception:
+        pass
+    if not api_key:
+        api_key = os.environ.get("TMDB_API_KEY")
+    if not api_key:
+        return {"status": "no_key", "message": "Add TMDB_API_KEY to Streamlit secrets"}
+
+    results = {}
+    try:
+        import requests
+        for film, movie_id in TMDB_MOVIE_IDS.items():
+            if movie_id is None:
+                results[film] = None
+                continue
+            url = f"https://api.themoviedb.org/3/movie/{movie_id}"
+            resp = requests.get(url, params={"api_key": api_key}, timeout=10)
+            if resp.status_code != 200:
+                results[film] = None
+                continue
+            data = resp.json()
+            results[film] = {
+                "popularity":   data.get("popularity"),
+                "vote_count":   data.get("vote_count"),
+                "vote_average": data.get("vote_average"),
+                "title":        data.get("title"),
+            }
+        return {"status": "ok", "films": results,
+                "fetched_at": datetime.datetime.utcnow().isoformat()}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
+def calibrate_from_tmdb(popularity: float, film: str) -> float:
+    """
+    Map TMDB popularity score to an audience score adjustment.
+
+    TMDB popularity benchmarks at ~9 months pre-release:
+      Endgame-level tentpole:  500+
+      Strong MCU/blockbuster:  200–500
+      Neutral:                 75–200
+      Soft tracking:           25–75
+      Low / MCU fatigue:       <25
+
+    Dune has a smaller but highly engaged fanbase — lower absolute
+    threshold still represents strong relative demand.
+    """
+    if popularity is None:
+        return 0.0
+
+    if film == "AVENGERS":
+        if popularity >= 500:   return +3.0
+        elif popularity >= 200: return +1.5
+        elif popularity >= 75:  return  0.0
+        elif popularity >= 25:  return -1.5
+        else:                   return -3.0
+    else:  # DUNE — smaller fandom, lower absolute baseline
+        if popularity >= 200:   return +3.0
+        elif popularity >= 75:  return +1.5
+        elif popularity >= 30:  return  0.0
+        elif popularity >= 10:  return -1.5
+        else:                   return -3.0
+
+
+# ── TRAKT ──────────────────────────────────────────────────────────────────────
+
+# Trakt slugs — usually lowercase-hyphenated title, verify at trakt.tv/movies/<slug>
+TRAKT_MOVIE_SLUGS = {
+    "avengers": "avengers-doomsday",
+    "dune":     "dune-part-three",
+}
+
+def fetch_trakt_signals() -> dict:
+    """
+    Fetch Trakt watchlist collectors + watcher count for both films.
+    Requires TRAKT_CLIENT_ID in environment or Streamlit secrets.
+
+    'collectors' = users who added to collection (high-intent, organic demand)
+    'watchers'   = users who have watched (pre-release: near-zero, ignore)
+    'lists'      = times added to curated lists (taste-graph signal)
+
+    At 9 months pre-release, collectors is the most meaningful metric.
+    A collector count growing week-over-week signals building organic demand.
+    """
+    client_id = None
+    try:
+        import streamlit as st
+        client_id = st.secrets.get("TRAKT_CLIENT_ID")
+    except Exception:
+        pass
+    if not client_id:
+        client_id = os.environ.get("TRAKT_CLIENT_ID")
+    if not client_id:
+        return {"status": "no_key", "message": "Add TRAKT_CLIENT_ID to Streamlit secrets"}
+
+    results = {}
+    try:
+        import requests
+        headers = {
+            "Content-Type":      "application/json",
+            "trakt-api-version": "2",
+            "trakt-api-key":     client_id,
+        }
+        for film, slug in TRAKT_MOVIE_SLUGS.items():
+            url = f"https://api.trakt.tv/movies/{slug}/stats"
+            resp = requests.get(url, headers=headers, timeout=10)
+            if resp.status_code != 200:
+                results[film] = None
+                continue
+            data = resp.json()
+            results[film] = {
+                "watchers":   data.get("watchers"),
+                "collectors": data.get("collectors"),
+                "lists":      data.get("lists"),
+                "comments":   data.get("comments"),
+            }
+        return {"status": "ok", "films": results,
+                "fetched_at": datetime.datetime.utcnow().isoformat()}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
+def calibrate_from_trakt(collectors: int, film: str) -> float:
+    """
+    Map Trakt collector count to an audience score adjustment.
+
+    'collectors' measures organic anticipation — users proactively
+    adding the film to track it, independent of marketing spend.
+    High collector counts at 9 months out predict strong opening weekends.
+
+    Benchmarks (comparable blockbusters at 9 months pre-release):
+      Endgame-level:  100k+ collectors
+      Strong:          40k–100k
+      Neutral:         15k–40k
+      Soft:             5k–15k
+      Low:             <5k
+    """
+    if collectors is None:
+        return 0.0
+
+    if film == "AVENGERS":
+        if collectors >= 100_000:  return +3.0
+        elif collectors >= 40_000: return +1.5
+        elif collectors >= 15_000: return  0.0
+        elif collectors >=  5_000: return -1.5
+        else:                      return -3.0
+    else:  # DUNE — smaller Trakt userbase overlap
+        if collectors >= 40_000:   return +3.0
+        elif collectors >= 15_000: return +1.5
+        elif collectors >=  5_000: return  0.0
+        elif collectors >=  1_500: return -1.5
+        else:                      return -3.0
 
 
 # ── MASTER FETCH + CALIBRATE ──────────────────────────────────────────────────
@@ -476,7 +657,51 @@ def fetch_and_calibrate(base_dune_score: int = 87, base_av_score: int = 88) -> d
     else:
         sources_used.append("Wikipedia (unavailable)")
 
-    # ── 4. Spider-Man: BND trailer calibration ───────────────────────────────
+    # ── 4. TMDB popularity ────────────────────────────────────────────────────
+    tmdb = fetch_tmdb_signals()
+    if tmdb.get("status") == "ok" and tmdb.get("films"):
+        av_tmdb   = tmdb["films"].get("avengers") or {}
+        dune_tmdb = tmdb["films"].get("dune") or {}
+
+        av_tmdb_adj   = calibrate_from_tmdb(av_tmdb.get("popularity"),   "AVENGERS")
+        dune_tmdb_adj = calibrate_from_tmdb(dune_tmdb.get("popularity"), "DUNE")
+
+        av_adj   += av_tmdb_adj
+        dune_adj += dune_tmdb_adj
+        sources_used.append("TMDB")
+
+        signals["avengers"]["tmdb_popularity"]   = av_tmdb.get("popularity")
+        signals["avengers"]["tmdb_vote_count"]   = av_tmdb.get("vote_count")
+        signals["dune"]["tmdb_popularity"]       = dune_tmdb.get("popularity")
+        signals["dune"]["tmdb_vote_count"]       = dune_tmdb.get("vote_count")
+    else:
+        signals["_tmdb_status"]  = tmdb.get("status", "unavailable")
+        signals["_tmdb_message"] = tmdb.get("message", "")
+
+    # ── 5. Trakt collectors ───────────────────────────────────────────────────
+    trakt = fetch_trakt_signals()
+    if trakt.get("status") == "ok" and trakt.get("films"):
+        av_trakt   = trakt["films"].get("avengers") or {}
+        dune_trakt = trakt["films"].get("dune") or {}
+
+        av_trakt_adj   = calibrate_from_trakt(av_trakt.get("collectors"),   "AVENGERS")
+        dune_trakt_adj = calibrate_from_trakt(dune_trakt.get("collectors"), "DUNE")
+
+        av_adj   += av_trakt_adj
+        dune_adj += dune_trakt_adj
+        sources_used.append("Trakt")
+
+        signals["avengers"]["trakt_collectors"] = av_trakt.get("collectors")
+        signals["avengers"]["trakt_watchers"]   = av_trakt.get("watchers")
+        signals["avengers"]["trakt_lists"]      = av_trakt.get("lists")
+        signals["dune"]["trakt_collectors"]     = dune_trakt.get("collectors")
+        signals["dune"]["trakt_watchers"]       = dune_trakt.get("watchers")
+        signals["dune"]["trakt_lists"]          = dune_trakt.get("lists")
+    else:
+        signals["_trakt_status"]  = trakt.get("status", "unavailable")
+        signals["_trakt_message"] = trakt.get("message", "")
+
+    # ── 6. Spider-Man: BND trailer calibration ───────────────────────────────
     spidey_yt_id = YOUTUBE_VIDEO_IDS.get("spiderman_full")
     spidey_suggested_tier  = None
     spidey_trailer_fresh   = _is_fresh_trailer(signals.get("spiderman", {}).get("trailer_date"))
@@ -498,15 +723,23 @@ def fetch_and_calibrate(base_dune_score: int = 87, base_av_score: int = 88) -> d
         signals["spiderman"]["suggested_tier"] = spidey_suggested_tier
         sources_used.append("Spider-Man trailer (YouTube)")
 
-    # ── 5. Final calibrated scores ────────────────────────────────────────────
+    # ── 7. Final calibrated scores ────────────────────────────────────────────
     av_calibrated   = float(np.clip(base_av_score   + av_adj,   60, 100))
     dune_calibrated = float(np.clip(base_dune_score + dune_adj, 60, 100))
 
-    # Signal confidence — "high" requires YouTube + Wikipedia at minimum
-    live_sources = {"YouTube API", "Wikipedia"}
-    if live_sources.issubset(set(sources_used)) \
-            and not any("fallback" in s for s in sources_used):
+    # Signal confidence:
+    #   high   — YouTube + Wikipedia + at least one of TMDB / Trakt
+    #   medium — YouTube + Wikipedia only (or partial)
+    #   low    — no live sources
+    sources_set = set(sources_used)
+    has_core      = {"YouTube API", "Wikipedia"}.issubset(sources_set)
+    has_secondary = bool(sources_set & {"TMDB", "Trakt"})
+    no_fallback   = not any("fallback" in s for s in sources_used)
+
+    if has_core and has_secondary and no_fallback:
         confidence = "high"
+    elif has_core and no_fallback:
+        confidence = "medium"
     elif any(s for s in sources_used if "fallback" not in s):
         confidence = "medium"
     else:
