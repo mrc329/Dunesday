@@ -803,7 +803,16 @@ with tab3:
         dune_yt_views = _yt_views_M("dune_t1")
         dune_color    = P["dune"]
         dune_dim      = P["dim"]
-        if dune_yt_views is not None:
+        _dune_t1_fresh = cal.get("dune_t1_fresh", False)
+        if dune_yt_views is not None and _dune_t1_fresh:
+            st.markdown(
+                f"<div style='border-left:2px solid {P['mid_ref']}; padding:8px 14px; "
+                f"font-size:0.82rem; color:{dune_dim};'>"
+                f"Trailer released today · <b style='color:{P['mid_ref']}'>{dune_yt_views:.0f}M</b> "
+                f"YouTube views — too early to calibrate. Check back after 24h.</div>",
+                unsafe_allow_html=True,
+            )
+        elif dune_yt_views is not None:
             st.markdown(
                 f"<div style='border-left:2px solid {dune_color}; padding:8px 14px; "
                 f"font-size:0.82rem; color:{dune_dim};'>"
@@ -978,9 +987,10 @@ with tab3:
         "SPIDER-MAN: BRAND NEW DAY — MCU BRAND SIGNAL</p>",
         unsafe_allow_html=True,
     )
-    _spidey_sig_tab  = signals.get("spiderman", {})
+    _spidey_sig_tab     = signals.get("spiderman", {})
     _spidey_views_M_tab = _spidey_sig_tab.get("yt_trailer_views_M")
     _spidey_tier_tab    = cal.get("spidey_suggested_tier") or _spidey_sig_tab.get("suggested_tier")
+    _spidey_fresh       = cal.get("spidey_trailer_fresh", False)
     _spidey_color = P["av"] if _spidey_tier_tab in ("Disappoints", "Soft") else \
                     P["dune"] if _spidey_tier_tab in ("Strong", "Blockbuster") else P["mid_ref"]
 
@@ -993,14 +1003,27 @@ with tab3:
     _sc2.metric(
         "YouTube views",
         f"{_spidey_views_M_tab:.0f}M" if _spidey_views_M_tab else "Pending",
-        delta="Set spiderman_full video ID" if not _spidey_views_M_tab else "Live",
+        delta="Live — accumulating" if _spidey_fresh and _spidey_views_M_tab else
+              "Set spiderman_full video ID" if not _spidey_views_M_tab else "Live",
     )
     _sc3.metric(
         "Suggested impact tier",
-        _spidey_tier_tab or "—",
-        delta="MCU brand signal → Avengers score",
+        "Too early" if _spidey_fresh else (_spidey_tier_tab or "—"),
+        delta="Check back after 24h" if _spidey_fresh else "MCU brand signal → Avengers score",
     )
-    if _spidey_tier_tab:
+    if _spidey_fresh and _spidey_views_M_tab:
+        st.markdown(f"""
+        <div style='border-left:2px solid {P["mid_ref"]}; padding:7px 12px; margin-top:6px;'>
+          <span style='color:{P["mid_ref"]}; font-size:0.6rem; letter-spacing:2px'>
+            TOO EARLY TO CALIBRATE
+          </span><br>
+          <span style='color:{P["dim"]}; font-size:0.76rem'>
+            Trailer released today — <b style='color:{P["mid_ref"]}'>{_spidey_views_M_tab:.0f}M</b> YouTube
+            views so far. Benchmarks are measured at 24 hours. Check back tomorrow.
+          </span>
+        </div>
+        """, unsafe_allow_html=True)
+    elif _spidey_tier_tab:
         st.markdown(f"""
         <div style='border-left:2px solid {_spidey_color}; padding:7px 12px; margin-top:6px;'>
           <span style='color:{_spidey_color}; font-size:0.6rem; letter-spacing:2px'>

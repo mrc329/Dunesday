@@ -156,6 +156,7 @@ HYPE_SIGNALS = {
         "teaser_views": [],
         "combined_views_B": 0,
         "full_trailer_released": False,
+        "trailer_date": "2026-03-18",   # Dune: Part Three teaser released 2026-03-18
         "alamo_poll_rank": 1,
         "alamo_poll_respondents": 14000,
     },

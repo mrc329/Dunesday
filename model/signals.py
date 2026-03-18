@@ -21,6 +21,19 @@ import datetime
 import numpy as np
 
 # ── FALLBACK VALUES (update manually after each major event) ──────────────────
+def _is_fresh_trailer(date_str: str) -> bool:
+    """Return True if a trailer was released today (< 24 hours old by date).
+    Suppresses calibration when view counts are too early to compare
+    against 24-hour benchmarks."""
+    if not date_str:
+        return False
+    try:
+        release_date = datetime.date.fromisoformat(date_str)
+        return (datetime.date.today() - release_date).days < 1
+    except ValueError:
+        return False
+
+
 FALLBACK_SIGNALS = {
     "last_updated":  "2026-02-26",
     "source":        "fallback",
@@ -38,6 +51,7 @@ FALLBACK_SIGNALS = {
         "trends_interest":   13,
         "yt_trailer_views":  None,
         "full_trailer_out":  False,
+        "trailer_date":      "2026-03-18",
         "alamo_rank":        1,
         "reddit_hot_avg":    None,  # avg score of top-25 hot posts in r/dune
         "reddit_posts_24h":  None,
@@ -469,6 +483,7 @@ def fetch_and_calibrate(base_dune_score: int = 87, base_av_score: int = 88) -> d
     sources_used.append("Teaser decay curve")
 
     # ── 3. YouTube API ────────────────────────────────────────────────────────
+    dune_t1_fresh = _is_fresh_trailer(signals.get("dune", {}).get("trailer_date"))
     yt = fetch_youtube_views()
     if yt.get("status") == "ok" and yt.get("videos"):
         av_ids = {
@@ -493,7 +508,7 @@ def fetch_and_calibrate(base_dune_score: int = 87, base_av_score: int = 88) -> d
         if av_yt_total > 0:
             av_adj   += calibrate_from_yt_views(av_yt_total, "AVENGERS")
             sources_used.append("YouTube API")
-        if dune_yt_total > 0:
+        if dune_yt_total > 0 and not dune_t1_fresh:
             dune_adj += calibrate_from_yt_views(dune_yt_total, "DUNE")
 
         signals["avengers"]["yt_trailer_views"] = av_yt_total or None
@@ -534,12 +549,15 @@ def fetch_and_calibrate(base_dune_score: int = 87, base_av_score: int = 88) -> d
 
     # ── 5. Spider-Man: BND trailer calibration ────────────────────────────────
     spidey_yt_id = YOUTUBE_VIDEO_IDS.get("spiderman_full")
-    spidey_suggested_tier = None
+    spidey_suggested_tier  = None
+    spidey_trailer_fresh   = _is_fresh_trailer(signals.get("spiderman", {}).get("trailer_date"))
     if yt.get("status") == "ok" and spidey_yt_id and spidey_yt_id in yt.get("videos", {}):
         spidey_views_M = yt["videos"][spidey_yt_id]["views"] / 1_000_000
-        spidey_suggested_tier = calibrate_from_spidey_trailer(spidey_views_M)
         signals["spiderman"]["yt_trailer_views_M"] = round(spidey_views_M, 1)
-        signals["spiderman"]["suggested_tier"]     = spidey_suggested_tier
+        if not spidey_trailer_fresh:
+            # Only calibrate once views have had 24 hours to accumulate
+            spidey_suggested_tier = calibrate_from_spidey_trailer(spidey_views_M)
+            signals["spiderman"]["suggested_tier"] = spidey_suggested_tier
         sources_used.append("Spider-Man trailer (YouTube)")
 
     # ── 6. Final calibrated scores ────────────────────────────────────────────
@@ -567,6 +585,8 @@ def fetch_and_calibrate(base_dune_score: int = 87, base_av_score: int = 88) -> d
         "signal_confidence":    confidence,
         "teaser_decay_signal":  "soft" if av_decay_adj < -1 else "neutral" if av_decay_adj == 0 else "strong",
         "spidey_suggested_tier": spidey_suggested_tier,
+        "spidey_trailer_fresh":  spidey_trailer_fresh,
+        "dune_t1_fresh":         dune_t1_fresh,
         "notes": _build_notes(av_adj, dune_adj, trends, yt, reddit, spidey_suggested_tier),
     }
 
