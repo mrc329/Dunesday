@@ -380,21 +380,6 @@ with st.sidebar:
         st.caption(f"📌 {cal['notes']}")
 
     st.divider()
-    override = st.toggle("Manual score override", value=False)
-    if override:
-        dune_aud = st.slider("Dune (manual)", 60, 100, int(cal["dune_calibrated"]))
-        av_aud   = st.slider("Avengers (manual)", 60, 100, int(cal["avengers_calibrated"]))
-        st.caption("⚠️ Overriding live calibration")
-    else:
-        dune_aud = int(cal["dune_calibrated"])
-        # Apply Spider-Man MCU brand signal on top of live calibration
-        av_aud   = int(np.clip(cal["avengers_calibrated"] + spidey_adj, 60, 100))
-
-    st.divider()
-    st.markdown("**International Multipliers**")
-    dune_intl = st.slider("Dune intl mult", 0.8, 2.5, 1.48, 0.05)
-    av_intl   = st.slider("Avengers intl mult", 1.0, 3.5, 2.18, 0.05)
-
     st.markdown("**Competitor Signals**")
     spidey_tier = st.select_slider(
         "Spider-Man: Brand New Day (Jul 25 2026)",
@@ -409,6 +394,22 @@ with st.sidebar:
         f"**{spidey_adj:+d} pts** · OW mult "
         f"{'↑' if spidey_adj > 0 else '↓' if spidey_adj < 0 else '—'}"
     )
+
+    st.divider()
+    override = st.toggle("Manual score override", value=False)
+    if override:
+        dune_aud = st.slider("Dune (manual)", 60, 100, int(cal["dune_calibrated"]))
+        av_aud   = st.slider("Avengers (manual)", 60, 100, int(cal["avengers_calibrated"]))
+        st.caption("⚠️ Overriding live calibration")
+    else:
+        dune_aud = int(cal["dune_calibrated"])
+        # Apply Spider-Man MCU brand signal on top of live calibration
+        av_aud   = int(np.clip(cal["avengers_calibrated"] + spidey_adj, 60, 100))
+
+    st.divider()
+    st.markdown("**International Multipliers**")
+    dune_intl = st.slider("Dune intl mult", 0.8, 2.5, 1.48, 0.05)
+    av_intl   = st.slider("Avengers intl mult", 1.0, 3.5, 2.18, 0.05)
 
     st.markdown("**Simulation**")
     n_trials = st.select_slider("MC trials", [500, 1000, 2000, 5000], value=1000)
