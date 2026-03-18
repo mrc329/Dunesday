@@ -726,20 +726,41 @@ with tab3:
             ))
             st.plotly_chart(fig_d, use_container_width=True)
 
+        _cal_sources = cal.get("sources", [])
+        _trends_live = "Google Trends" in _cal_sources
+        _reddit_live = "Reddit API" in _cal_sources
+
         # YouTube total views across all 4 teasers
+        _av_metrics = st.columns(2) if _trends_live else None
         if yt_live:
             av_yt_total = sum(
                 yt_videos[YOUTUBE_VIDEO_IDS[s]]["views"]
                 for s in _AV_TEASER_SLOTS
                 if YOUTUBE_VIDEO_IDS.get(s) and YOUTUBE_VIDEO_IDS[s] in yt_videos
             )
-            st.metric("YT teaser views",
-                      f"{av_yt_total / 1_000_000:.0f}M" if av_yt_total else "—",
-                      delta=f"T1–T4 combined · {yt_fetched[:10]}")
+            _yt_col = _av_metrics[0] if _av_metrics else st
+            _yt_col.metric("YT teaser views",
+                           f"{av_yt_total / 1_000_000:.0f}M" if av_yt_total else "—",
+                           delta=f"T1–T4 combined · {yt_fetched[:10]}")
         else:
-            st.metric("YT trailer views",
-                      f"{av_sig['yt_trailer_views']:,}" if av_sig.get("yt_trailer_views") else "—",
-                      delta="Full trailer not released" if not av_sig.get("full_trailer_out") else "Live")
+            _yt_col = _av_metrics[0] if _av_metrics else st
+            _yt_col.metric("YT trailer views",
+                           f"{av_sig['yt_trailer_views']:,}" if av_sig.get("yt_trailer_views") else "—",
+                           delta="Full trailer not released" if not av_sig.get("full_trailer_out") else "Live")
+
+        if _trends_live:
+            _av_metrics[1].metric("Trends interest",
+                                  f"{av_sig.get('trends_interest', '—')}/100",
+                                  delta="Google Trends US")
+
+        if _reddit_live and (av_sig.get("reddit_hot_avg") is not None or av_sig.get("reddit_posts_24h") is not None):
+            r1, r2 = st.columns(2)
+            r1.metric("r/marvelstudios hot avg",
+                      f"{av_sig['reddit_hot_avg']:,.0f}" if av_sig.get("reddit_hot_avg") is not None else "—",
+                      delta="Upvote velocity")
+            r2.metric("r/marvelstudios posts/24h",
+                      str(av_sig["reddit_posts_24h"]) if av_sig.get("reddit_posts_24h") is not None else "—",
+                      delta="Post volume")
 
         if len(teasers) >= 2 and teasers[0] > 0:
             decay_signal = cal.get("teaser_decay_signal", "neutral")
@@ -780,7 +801,55 @@ with tab3:
         else:
             st.info("No trailer released. WB following Part Two marketing cadence — strategic delay.")
 
-        st.metric("Alamo poll", "#1 Most Anticipated", delta="14,000 respondents")
+        _dune_m1, _dune_m2 = st.columns(2)
+        _dune_m2.metric("Alamo poll", "#1 Most Anticipated", delta="14,000 respondents")
+        if _trends_live:
+            _dune_m1.metric("Trends interest",
+                            f"{dune_sig.get('trends_interest', '—')}/100",
+                            delta=f"vs Avengers {av_sig.get('trends_interest', '?')}/100")
+        else:
+            _dune_m1.empty()
+
+        if _reddit_live and (dune_sig.get("reddit_hot_avg") is not None or dune_sig.get("reddit_posts_24h") is not None):
+            r1, r2 = st.columns(2)
+            r1.metric("r/dune hot avg",
+                      f"{dune_sig['reddit_hot_avg']:,.0f}" if dune_sig.get("reddit_hot_avg") is not None else "—",
+                      delta="Upvote velocity")
+            r2.metric("r/dune posts/24h",
+                      str(dune_sig["reddit_posts_24h"]) if dune_sig.get("reddit_posts_24h") is not None else "—",
+                      delta="Post volume")
+
+        if _trends_live:
+            av_t   = av_sig.get("trends_interest", 72)
+            dune_t = dune_sig.get("trends_interest", 13)
+            total_t = av_t + dune_t or 1
+            fig_ratio = go.Figure()
+            fig_ratio.add_trace(go.Bar(
+                x=["Search Interest Share"],
+                y=[av_t / total_t * 100],
+                name="Avengers", marker_color=P["av"],
+                text=[f"Avengers {av_t / total_t * 100:.0f}%"],
+                textposition="inside",
+                textfont=dict(size=10, color="white"),
+            ))
+            fig_ratio.add_trace(go.Bar(
+                x=["Search Interest Share"],
+                y=[dune_t / total_t * 100],
+                name="Dune", marker_color=P["dune"],
+                text=[f"Dune {dune_t / total_t * 100:.0f}%"],
+                textposition="inside",
+                textfont=dict(size=10, color=P["bg"]),
+            ))
+            fig_ratio.add_hline(
+                y=18, line_dash="dot", line_width=0.8,
+                line_color=P["dune"], opacity=0.7,
+                annotation_text="Expected Dune baseline (no trailer)",
+                annotation_font_color=P["dune"], annotation_font_size=9,
+            )
+            fig_ratio.update_layout(**_layout(P, barmode="stack", height=260, yaxis_title="%"))
+            st.plotly_chart(fig_ratio, use_container_width=True)
+            st.caption("Dune's 13/100 vs Avengers 72/100 is marketing stage, not demand. "
+                       "Dune has released zero promotional materials.")
 
     # ── YouTube per-video stats table ─────────────────────────────────────────
     if yt_live:
@@ -908,7 +977,22 @@ with tab3:
         yt_row_status = ("⚠ Key needed" if yt_stats.get("status") == "no_key"
                          else f"⚠ {yt_stats.get('status','unavailable')}")
 
+    # Build trends / reddit rows only when those sources are active
+    _av_t   = av_sig.get("trends_interest", 0)
+    _dune_t = dune_sig.get("trends_interest", 0)
+    _trends_row = ["Google Trends", "Search interest ratio",
+                   f"Av {_av_t} / Dune {_dune_t}" if _trends_live else "—",
+                   f"Av {cal['avengers_adj']:+.1f}pt / Dune {cal['dune_adj']:+.1f}pt",
+                   "✓ Live" if _trends_live else "⚠ Not configured"]
+    _reddit_row = ["Reddit API", "Post volume + upvote velocity",
+                   f"r/marvelstudios {av_sig.get('reddit_hot_avg') or '—'} avg / "
+                   f"r/dune {dune_sig.get('reddit_hot_avg') or '—'} avg"
+                   if _reddit_live else "—",
+                   "±3 pts max (score avg + post volume)",
+                   "✓ Live" if _reddit_live else "⚠ Not configured"]
+
     rows_sig = [
+        _trends_row,
         ["Teaser decay", "T1→T2 view retention",
          f"{teasers[0]:.0f}M → {teasers[1]:.0f}M ({teasers[1]/teasers[0]*100:.0f}%)"
          if len(teasers) >= 2 and teasers[0] > 0 else "—",
@@ -916,6 +1000,7 @@ with tab3:
          f"✓ {teaser_src}"],
         ["YouTube API", "Official trailer views", yt_row_val,
          "Feeds teaser decay + audience score calibration", yt_row_status],
+        _reddit_row,
         ["Fandango presales", "Purchase intent", "Not open yet",
          "Opens Sept 2026", "⏳ Pending"],
     ]
