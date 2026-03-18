@@ -665,17 +665,24 @@ with tab3:
             return None
         return yt_videos[vid_id]["views"] / 1_000_000
 
-    # Avengers teaser views — prefer YouTube live, fall back to X/Twitter
+    # Avengers teaser views — prefer YouTube live, fall back to X/Twitter per slot
     av_sig   = signals["avengers"]
     dune_sig = signals["dune"]
     yt_av_teasers = [_yt_views_M(s) for s in _AV_TEASER_SLOTS]
     use_yt_teasers = any(v is not None for v in yt_av_teasers)
+    x_fallbacks = av_sig.get("teaser_views_x_M", [])
 
     if use_yt_teasers:
-        teasers      = [v for v in yt_av_teasers if v is not None]
-        teaser_src   = "YouTube"
+        # For each slot, use YouTube if available, otherwise fall back to X/Twitter estimate
+        merged = [
+            yt if yt is not None else (x_fallbacks[i] if i < len(x_fallbacks) else None)
+            for i, yt in enumerate(yt_av_teasers)
+        ]
+        teasers    = [v for v in merged if v is not None]
+        teaser_src = "YouTube"
     else:
-        teasers    = av_sig.get("teaser_views_x_M", [])
+        merged     = [None] * len(_AV_TEASER_SLOTS)
+        teasers    = x_fallbacks
         teaser_src = "X/Twitter"
 
     col_a, col_b = st.columns(2)
@@ -686,11 +693,11 @@ with tab3:
                     unsafe_allow_html=True)
 
         if teasers:
-            # If YouTube has data, show all 4 slots (zero-fill any missing)
             if use_yt_teasers:
+                # Show all 4 slots; YouTube data where available, X/Twitter fallback for the rest
                 labels_decay = [_YT_SLOT_LABELS[s].replace("Avengers ", "")
                                 for s in _AV_TEASER_SLOTS]
-                vals_decay   = [_yt_views_M(s) or 0.0 for s in _AV_TEASER_SLOTS]
+                vals_decay   = [v if v is not None else 0.0 for v in merged]
             else:
                 labels_decay = [f"T{i+1}" for i in range(len(teasers))]
                 vals_decay   = teasers
@@ -796,7 +803,22 @@ with tab3:
         dune_yt_views = _yt_views_M("dune_t1")
         dune_color    = P["dune"]
         dune_dim      = P["dim"]
-        if dune_yt_views is not None:
+        _dune_t1_fresh   = cal.get("dune_t1_fresh", False)
+        _dune_eng_ratio  = dune_sig.get("yt_engagement_ratio")
+        _dune_likes      = dune_sig.get("yt_trailer_likes")
+        if dune_yt_views is not None and _dune_t1_fresh:
+            _dune_ratio_pct = f"{_dune_eng_ratio * 100:.1f}%" if _dune_eng_ratio else "—"
+            _dune_likes_str = f" · {_dune_likes:,} likes" if _dune_likes else ""
+            st.markdown(
+                f"<div style='border-left:2px solid {dune_color}; padding:8px 14px; "
+                f"font-size:0.82rem; color:{dune_dim};'>"
+                f"Trailer released today · <b style='color:{dune_color}'>{dune_yt_views:.0f}M</b> views"
+                f"{_dune_likes_str} · like/view ratio "
+                f"<b style='color:{dune_color}'>{_dune_ratio_pct}</b>"
+                f" — calibrated from engagement (view-count benchmarks need 24h)</div>",
+                unsafe_allow_html=True,
+            )
+        elif dune_yt_views is not None:
             st.markdown(
                 f"<div style='border-left:2px solid {dune_color}; padding:8px 14px; "
                 f"font-size:0.82rem; color:{dune_dim};'>"
@@ -971,13 +993,16 @@ with tab3:
         "SPIDER-MAN: BRAND NEW DAY — MCU BRAND SIGNAL</p>",
         unsafe_allow_html=True,
     )
-    _spidey_sig_tab  = signals.get("spiderman", {})
+    _spidey_sig_tab     = signals.get("spiderman", {})
     _spidey_views_M_tab = _spidey_sig_tab.get("yt_trailer_views_M")
+    _spidey_likes_tab   = _spidey_sig_tab.get("yt_trailer_likes")
+    _spidey_ratio_tab   = _spidey_sig_tab.get("yt_engagement_ratio")
     _spidey_tier_tab    = cal.get("spidey_suggested_tier") or _spidey_sig_tab.get("suggested_tier")
+    _spidey_fresh       = cal.get("spidey_trailer_fresh", False)
     _spidey_color = P["av"] if _spidey_tier_tab in ("Disappoints", "Soft") else \
                     P["dune"] if _spidey_tier_tab in ("Strong", "Blockbuster") else P["mid_ref"]
 
-    _sc1, _sc2, _sc3 = st.columns(3)
+    _sc1, _sc2, _sc3, _sc4 = st.columns(4)
     _sc1.metric(
         "Trailer status",
         "Released" if _spidey_sig_tab.get("full_trailer_released") else "Not released",
@@ -985,24 +1010,39 @@ with tab3:
     )
     _sc2.metric(
         "YouTube views",
-        f"{_spidey_views_M_tab:.0f}M" if _spidey_views_M_tab else "Pending",
-        delta="Set spiderman_full video ID" if not _spidey_views_M_tab else "Live",
+        f"{_spidey_views_M_tab:.0f}M" if _spidey_views_M_tab else "—",
+        delta="Accumulating" if _spidey_fresh and _spidey_views_M_tab else
+              "Set spiderman_full video ID" if not _spidey_views_M_tab else "Live",
     )
     _sc3.metric(
+        "Like/view ratio",
+        f"{_spidey_ratio_tab * 100:.1f}%" if _spidey_ratio_tab else "—",
+        delta=f"{_spidey_likes_tab:,} likes" if _spidey_likes_tab else
+              "Day-1 signal — time-independent",
+    )
+    _sc4.metric(
         "Suggested impact tier",
         _spidey_tier_tab or "—",
-        delta="MCU brand signal → Avengers score",
+        delta="Via engagement ratio" if _spidey_fresh and _spidey_tier_tab else
+              "Via 24h view count" if _spidey_tier_tab else "MCU brand signal → Avengers score",
     )
     if _spidey_tier_tab:
+        _ratio_pct = f"{_spidey_ratio_tab * 100:.1f}%" if _spidey_ratio_tab else "—"
+        _method    = "DAY-1 ENGAGEMENT RATIO" if _spidey_fresh else "AUTO-CALIBRATION"
+        _detail    = (
+            f"Like/view ratio <b style='color:{_spidey_color}'>{_ratio_pct}</b> → "
+            f"<b style='color:{_spidey_color}'>{_spidey_tier_tab}</b> tier. "
+            "View-count benchmarks need 24 hours — ratio compares trailers released months apart."
+            if _spidey_fresh else
+            f"24h view count suggests <b style='color:{_spidey_color}'>{_spidey_tier_tab}</b>"
+            " tier — adjust the sidebar slider to override."
+        )
         st.markdown(f"""
         <div style='border-left:2px solid {_spidey_color}; padding:7px 12px; margin-top:6px;'>
           <span style='color:{_spidey_color}; font-size:0.6rem; letter-spacing:2px'>
-            AUTO-CALIBRATION: {_spidey_tier_tab.upper()}
+            {_method}: {_spidey_tier_tab.upper()}
           </span><br>
-          <span style='color:{P["dim"]}; font-size:0.76rem'>
-            Trailer view count suggests <b style='color:{_spidey_color}'>{_spidey_tier_tab}</b>
-            impact tier — adjust the sidebar slider to override.
-          </span>
+          <span style='color:{P["dim"]}; font-size:0.76rem'>{_detail}</span>
         </div>
         """, unsafe_allow_html=True)
     else:
