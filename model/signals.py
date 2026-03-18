@@ -197,6 +197,29 @@ def calibrate_from_spidey_trailer(views_M: float) -> str:
     else:                 return "Disappoints"    # MCU fatigue confirmed
 
 
+def calibrate_from_trailer_engagement(views: int, likes: int) -> str | None:
+    """
+    Map like/view ratio to a Spider-Man impact tier.
+    Time-independent — valid from minute one, so trailers released months
+    apart can be compared on equal footing.
+
+    Benchmarks (early-period like rates for comparable MCU/blockbuster releases):
+      NWH T1:         ~4–5%  → record-breaking enthusiasm
+      FFH / D&W:      ~3–4%  → healthy MCU engagement
+      Homecoming:     ~2–3%  → acceptable reboot interest
+      Thor L&T:       ~1–2%  → underwhelming, MCU fatigue showing
+    """
+    if not views or not likes:
+        return None
+    ratio = likes / views   # e.g. 0.035 = 3.5%
+
+    if ratio >= 0.045:   return "Blockbuster"
+    elif ratio >= 0.033: return "Strong"
+    elif ratio >= 0.022: return "Neutral"
+    elif ratio >= 0.013: return "Soft"
+    else:                return "Disappoints"
+
+
 def calibrate_from_reddit(hot_score_avg: float, posts_24h: int, film: str) -> float:
     """
     Convert Reddit engagement metrics into audience score adjustment.
@@ -505,14 +528,29 @@ def fetch_and_calibrate(base_dune_score: int = 87, base_av_score: int = 88) -> d
             v["views"] for vid_id, v in yt["videos"].items()
             if vid_id in dune_ids
         )
+        dune_yt_likes = sum(
+            v.get("likes", 0) for vid_id, v in yt["videos"].items()
+            if vid_id in dune_ids
+        )
         if av_yt_total > 0:
             av_adj   += calibrate_from_yt_views(av_yt_total, "AVENGERS")
             sources_used.append("YouTube API")
-        if dune_yt_total > 0 and not dune_t1_fresh:
-            dune_adj += calibrate_from_yt_views(dune_yt_total, "DUNE")
+        if dune_yt_total > 0:
+            if dune_t1_fresh:
+                # Day 1: use engagement ratio — can't compare hours-old views to 24h benchmarks
+                _dune_eng_adj = calibrate_from_trailer_engagement(dune_yt_total, dune_yt_likes)
+                # Map engagement tier → score adj for Dune (reuse existing thresholds)
+                _dune_eng_map = {"Blockbuster": +4.0, "Strong": +2.0,
+                                 "Neutral": 0.0, "Soft": -2.0, "Disappoints": -4.0}
+                dune_adj += _dune_eng_map.get(_dune_eng_adj or "Neutral", 0.0)
+            else:
+                dune_adj += calibrate_from_yt_views(dune_yt_total, "DUNE")
 
         signals["avengers"]["yt_trailer_views"] = av_yt_total or None
         signals["dune"]["yt_trailer_views"]     = dune_yt_total or None
+        signals["dune"]["yt_trailer_likes"]     = dune_yt_likes or None
+        signals["dune"]["yt_engagement_ratio"]  = round(dune_yt_likes / dune_yt_total, 4) \
+                                                  if dune_yt_total else None
     else:
         signals["_yt_status"] = yt.get("status", "unavailable")
         signals["_yt_message"] = yt.get("message", "")
@@ -552,12 +590,21 @@ def fetch_and_calibrate(base_dune_score: int = 87, base_av_score: int = 88) -> d
     spidey_suggested_tier  = None
     spidey_trailer_fresh   = _is_fresh_trailer(signals.get("spiderman", {}).get("trailer_date"))
     if yt.get("status") == "ok" and spidey_yt_id and spidey_yt_id in yt.get("videos", {}):
-        spidey_views_M = yt["videos"][spidey_yt_id]["views"] / 1_000_000
-        signals["spiderman"]["yt_trailer_views_M"] = round(spidey_views_M, 1)
-        if not spidey_trailer_fresh:
-            # Only calibrate once views have had 24 hours to accumulate
+        _spidey_vid    = yt["videos"][spidey_yt_id]
+        spidey_views   = _spidey_vid["views"]
+        spidey_views_M = spidey_views / 1_000_000
+        spidey_likes   = _spidey_vid.get("likes", 0)
+        signals["spiderman"]["yt_trailer_views_M"]  = round(spidey_views_M, 1)
+        signals["spiderman"]["yt_trailer_likes"]    = spidey_likes
+        signals["spiderman"]["yt_engagement_ratio"] = round(spidey_likes / spidey_views, 4) \
+                                                      if spidey_views else None
+        if spidey_trailer_fresh:
+            # Day 1: use like/view ratio — time-independent, fair across release dates
+            spidey_suggested_tier = calibrate_from_trailer_engagement(spidey_views, spidey_likes)
+        else:
+            # Day 2+: use 24h view count benchmarks
             spidey_suggested_tier = calibrate_from_spidey_trailer(spidey_views_M)
-            signals["spiderman"]["suggested_tier"] = spidey_suggested_tier
+        signals["spiderman"]["suggested_tier"] = spidey_suggested_tier
         sources_used.append("Spider-Man trailer (YouTube)")
 
     # ── 6. Final calibrated scores ────────────────────────────────────────────
