@@ -750,10 +750,27 @@ with tab3:
                 for s in _AV_TEASER_SLOTS
                 if YOUTUBE_VIDEO_IDS.get(s) and YOUTUBE_VIDEO_IDS[s] in yt_videos
             )
+            av_yt_likes = sum(
+                yt_videos[YOUTUBE_VIDEO_IDS[s]].get("likes", 0)
+                for s in _AV_TEASER_SLOTS
+                if YOUTUBE_VIDEO_IDS.get(s) and YOUTUBE_VIDEO_IDS[s] in yt_videos
+            )
+            _av_eng_ratio = av_yt_likes / av_yt_total if av_yt_total else None
             _yt_col = _av_metrics[0] if _av_metrics else st
             _yt_col.metric("YT teaser views",
                            f"{av_yt_total / 1_000_000:.0f}M" if av_yt_total else "—",
                            delta=f"T1–T4 combined · {yt_fetched[:10]}")
+            if _av_eng_ratio is not None:
+                _av_color = P["av"]
+                _av_dim   = P["dim"]
+                st.markdown(
+                    f"<div style='border-left:2px solid {_av_color}; padding:8px 14px; "
+                    f"font-size:0.82rem; color:{_av_dim};'>"
+                    f"T1–T4 combined · <b style='color:{_av_color}'>{av_yt_likes:,}</b> likes · "
+                    f"like/view ratio <b style='color:{_av_color}'>{_av_eng_ratio * 100:.2f}%</b>"
+                    f" — YouTube audience (primary platform: X)</div>",
+                    unsafe_allow_html=True,
+                )
         else:
             _yt_col = _av_metrics[0] if _av_metrics else st
             _yt_col.metric("YT trailer views",

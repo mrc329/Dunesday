@@ -524,6 +524,10 @@ def fetch_and_calibrate(base_dune_score: int = 87, base_av_score: int = 88) -> d
             v["views"] for vid_id, v in yt["videos"].items()
             if vid_id in av_ids
         )
+        av_yt_likes = sum(
+            v.get("likes", 0) for vid_id, v in yt["videos"].items()
+            if vid_id in av_ids
+        )
         dune_yt_total = sum(
             v["views"] for vid_id, v in yt["videos"].items()
             if vid_id in dune_ids
@@ -546,7 +550,10 @@ def fetch_and_calibrate(base_dune_score: int = 87, base_av_score: int = 88) -> d
             else:
                 dune_adj += calibrate_from_yt_views(dune_yt_total, "DUNE")
 
-        signals["avengers"]["yt_trailer_views"] = av_yt_total or None
+        signals["avengers"]["yt_trailer_views"]    = av_yt_total or None
+        signals["avengers"]["yt_trailer_likes"]    = av_yt_likes or None
+        signals["avengers"]["yt_engagement_ratio"] = round(av_yt_likes / av_yt_total, 4) \
+                                                     if av_yt_total else None
         signals["dune"]["yt_trailer_views"]     = dune_yt_total or None
         signals["dune"]["yt_trailer_likes"]     = dune_yt_likes or None
         signals["dune"]["yt_engagement_ratio"]  = round(dune_yt_likes / dune_yt_total, 4) \
