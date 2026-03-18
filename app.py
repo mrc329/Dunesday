@@ -12,7 +12,8 @@ import datetime
 from model.config import (FILM_PARAMS, IMAX_CONFIG,
                           AUDIENCE_SCORE_BENCHMARKS,
                           SPIDEY_IMPACT_ADJ, WEEKLY_DECAY_BENCHMARKS)
-from model.core import run_all_scenarios, imax_gap_summary, SCENARIOS
+from model.core import (run_all_scenarios, imax_gap_summary, SCENARIOS,
+                        polymarket_scenario_weights)
 from model.signals import (fetch_and_calibrate, YOUTUBE_TRAILER_URLS,
                            YOUTUBE_VIDEO_IDS, fetch_youtube_views)
 
@@ -431,12 +432,21 @@ with st.sidebar:
 
 
 # ── RUN MODEL ─────────────────────────────────────────────────────────────────
+_poly_sig       = signals.get("polymarket", {})
+_poly_ow_odds   = _poly_sig.get("avengers_ow_odds")
+_poly_fy_odds   = _poly_sig.get("avengers_full_year_odds")
+_poly_ratio     = _poly_sig.get("ow_decay_ratio")
+_poly_move_sig  = _poly_sig.get("move_signal")
+_poly_source    = _poly_sig.get("source", "fallback")
+_poly_weights   = polymarket_scenario_weights(_poly_ratio)
+
 with st.spinner("Running Monte Carlo..."):
     results = run_all_scenarios(
         n=n_trials,
         dune_aud=dune_aud, av_aud=av_aud,
         dune_intl=dune_intl, av_intl=av_intl,
         spidey_tier=spidey_tier,
+        polymarket_ow_odds=_poly_ow_odds,
     )
     imax = imax_gap_summary()
 
@@ -1197,6 +1207,137 @@ with tab5:
     c3.metric("Move to Jan P50", f"${sc_c_av:.0f}M",
               delta=f"+${sc_c_av - sc_a_av:.0f}M vs holding",
               delta_color="normal" if sc_c_av > sc_a_av else "inverse")
+
+    # ── Polymarket integration explainer ──────────────────────────────────────
+    st.divider()
+    st.markdown(
+        f"<p style='font-size:0.58rem; letter-spacing:2px; color:{P['dim']}; margin-bottom:10px;'>"
+        "POLYMARKET SIGNAL</p>",
+        unsafe_allow_html=True,
+    )
+
+    _pm_src_label = "LIVE" if _poly_source == "live" else "FALLBACK (2026-03-18)"
+    _pm_src_color = P["dune"] if _poly_source == "live" else P["dim"]
+    _rec_color = {
+        "move":      P["av"],
+        "lean_move": "#d48020",
+        "neutral":   P["mid_ref"],
+        "hold":      P["dune"],
+    }.get(_poly_weights["recommendation"], P["mid_ref"])
+
+    pm_c1, pm_c2, pm_c3, pm_c4 = st.columns(4)
+    pm_c1.metric(
+        "Avengers Best OW",
+        f"{_poly_ow_odds:.0%}" if _poly_ow_odds else "—",
+        delta=f"OW scalar {_poly_ow_odds and (1.05 if _poly_ow_odds >= 0.70 else 1.00 if _poly_ow_odds >= 0.50 else 0.90 if _poly_ow_odds >= 0.30 else 0.80):.2f}x in MC",
+    )
+    pm_c2.metric(
+        "Avengers Best Full Year",
+        f"{_poly_fy_odds:.0%}" if _poly_fy_odds else "—",
+        delta="Calendar-year domestic",
+    )
+    pm_c3.metric(
+        "OW / Full-Year Ratio",
+        f"{_poly_ratio:.1f}x" if _poly_ratio else "—",
+        delta="Legs collapse signal",
+        delta_color="inverse" if (_poly_ratio or 0) >= 3.0 else "off",
+    )
+    pm_c4.metric(
+        "Move Signal",
+        (_poly_weights["recommendation"].replace("_", " ").upper()),
+        delta=_pm_src_label,
+    )
+
+    # Weighted expected P50
+    _weighted_p50 = sum(
+        _poly_weights["weights"].get(sk, 0) * results[sk]["AVENGERS"]["p50"]
+        for sk in results
+    )
+    _sc_a_p50 = results["A_Both_Hold"]["AVENGERS"]["p50"]
+    _sc_b_p50 = results["B_Disney_May"]["AVENGERS"]["p50"]
+
+    with st.expander("How Polymarket feeds into this model", expanded=False):
+        st.markdown(f"""
+<div style='font-size:0.82rem; line-height:1.85; color:{P["text"]};'>
+
+**What Polymarket is**
+
+Polymarket is a prediction market where traders put real money on outcomes.
+Prices are probabilities set by the crowd — not polls, not analysts.
+With $1.1M+ traded on these two markets, the signal carries meaningful weight.
+
+**The two markets**
+
+| Market | Avengers odds | What it measures |
+|---|---|---|
+| Best opening weekend in 2026 | **{_poly_ow_odds:.0%}** | Pure opening-weekend demand |
+| Highest full-year gross in 2026 | **{_poly_fy_odds:.0%}** | Full domestic run (calendar year) |
+
+**Why the gap matters**
+
+The OW/FY ratio is **{_poly_ratio:.1f}x**. Avengers is the heavy favorite to open
+biggest, but the crowd gives it only {_poly_fy_odds:.0%} to dominate the full year.
+That gap is the market pricing in the IMAX conflict: Avengers loses 400 IMAX
+screens for 21 days, while Dune banks Christmas on all of them.
+
+**The calendar caveat**
+
+The full-year market measures *2026 calendar-year domestic gross*. Avengers
+opens Dec 18 — it only has ~2 weeks of 2026 to accumulate. Spider-Man opens
+July 25 and has ~5 months. So part of the ratio is just the opening-date math,
+not a pure legs signal. The ratio overstates the legs problem slightly, but the
+*direction* is correct.
+
+**How it enters the Monte Carlo**
+
+*Option A — OW scalar on opening weekend gross:*
+The OW odds ({_poly_ow_odds:.0%}) map to a **{_poly_ow_odds and (1.05 if _poly_ow_odds >= 0.70 else 1.00 if _poly_ow_odds >= 0.50 else 0.90 if _poly_ow_odds >= 0.30 else 0.80):.2f}x multiplier** applied to Avengers' mean
+opening-weekend gross in every trial. At 75% the crowd confirms a blockbuster
+opening — the model gets a +5% OW nudge. If odds fell to 40%, the model would
+apply a −10% OW penalty. This is the crowd acting as a real-money sentiment
+check on the $240M base assumption.
+
+*Option B — Scenario weights:*
+The OW/FY ratio ({_poly_ratio:.1f}x) maps to how much financial merit each scenario
+has, weighted by what the market is implicitly pricing. At {_poly_ratio:.1f}x:
+
+| Scenario | Weight | Avengers P50 |
+|---|---|---|
+| A: Both Hold | {_poly_weights["weights"]["A_Both_Hold"]:.0%} | ${results["A_Both_Hold"]["AVENGERS"]["p50"]:.0f}M |
+| B: Disney → May | {_poly_weights["weights"]["B_Disney_May"]:.0%} | ${results["B_Disney_May"]["AVENGERS"]["p50"]:.0f}M |
+| C: Disney → Jan | {_poly_weights["weights"]["C_Disney_Jan"]:.0%} | ${results["C_Disney_Jan"]["AVENGERS"]["p50"]:.0f}M |
+
+**Polymarket-weighted expected P50: ${_weighted_p50:.0f}M** vs ${_sc_a_p50:.0f}M if Disney holds.
+That's a **${_weighted_p50 - _sc_a_p50:+.0f}M** signal in favor of moving.
+
+</div>
+""", unsafe_allow_html=True)
+
+    # Scenario weights bar
+    _weight_df = pd.DataFrame({
+        "Scenario": [SCENARIOS[sk]["label"] for sk in ["A_Both_Hold", "B_Disney_May", "C_Disney_Jan"]],
+        "Weight":   [round(_poly_weights["weights"][sk] * 100) for sk in ["A_Both_Hold", "B_Disney_May", "C_Disney_Jan"]],
+        "Avengers P50 ($M)": [round(results[sk]["AVENGERS"]["p50"]) for sk in ["A_Both_Hold", "B_Disney_May", "C_Disney_Jan"]],
+    })
+    _wt_colors = [P["av"], P["dune"], P["cyan"]]
+    fig_pm = go.Figure(go.Bar(
+        x=_weight_df["Scenario"],
+        y=_weight_df["Weight"],
+        marker_color=_wt_colors,
+        text=[f'{w}%' for w in _weight_df["Weight"]],
+        textposition="outside",
+        textfont=dict(size=11, color=P["chart_font"]),
+    ))
+    fig_pm.add_annotation(
+        text=f"Polymarket-weighted P50: <b>${_weighted_p50:.0f}M</b>",
+        xref="paper", yref="paper", x=0.5, y=1.08,
+        showarrow=False, font=dict(size=11, color=P["text"]),
+        align="center",
+    )
+    fig_pm.update_layout(**_layout(P, outside_text=True, height=280,
+                                    yaxis_title="Scenario weight (%)",
+                                    yaxis_range=[0, 80]))
+    st.plotly_chart(fig_pm, use_container_width=True)
 
     st.divider()
     prob_data = {
