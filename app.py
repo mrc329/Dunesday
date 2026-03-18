@@ -665,17 +665,24 @@ with tab3:
             return None
         return yt_videos[vid_id]["views"] / 1_000_000
 
-    # Avengers teaser views — prefer YouTube live, fall back to X/Twitter
+    # Avengers teaser views — prefer YouTube live, fall back to X/Twitter per slot
     av_sig   = signals["avengers"]
     dune_sig = signals["dune"]
     yt_av_teasers = [_yt_views_M(s) for s in _AV_TEASER_SLOTS]
     use_yt_teasers = any(v is not None for v in yt_av_teasers)
+    x_fallbacks = av_sig.get("teaser_views_x_M", [])
 
     if use_yt_teasers:
-        teasers      = [v for v in yt_av_teasers if v is not None]
-        teaser_src   = "YouTube"
+        # For each slot, use YouTube if available, otherwise fall back to X/Twitter estimate
+        merged = [
+            yt if yt is not None else (x_fallbacks[i] if i < len(x_fallbacks) else None)
+            for i, yt in enumerate(yt_av_teasers)
+        ]
+        teasers    = [v for v in merged if v is not None]
+        teaser_src = "YouTube"
     else:
-        teasers    = av_sig.get("teaser_views_x_M", [])
+        merged     = [None] * len(_AV_TEASER_SLOTS)
+        teasers    = x_fallbacks
         teaser_src = "X/Twitter"
 
     col_a, col_b = st.columns(2)
@@ -686,11 +693,11 @@ with tab3:
                     unsafe_allow_html=True)
 
         if teasers:
-            # If YouTube has data, show all 4 slots (zero-fill any missing)
             if use_yt_teasers:
+                # Show all 4 slots; YouTube data where available, X/Twitter fallback for the rest
                 labels_decay = [_YT_SLOT_LABELS[s].replace("Avengers ", "")
                                 for s in _AV_TEASER_SLOTS]
-                vals_decay   = [_yt_views_M(s) or 0.0 for s in _AV_TEASER_SLOTS]
+                vals_decay   = [v if v is not None else 0.0 for v in merged]
             else:
                 labels_decay = [f"T{i+1}" for i in range(len(teasers))]
                 vals_decay   = teasers
