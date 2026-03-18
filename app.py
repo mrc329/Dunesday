@@ -744,13 +744,14 @@ with tab3:
                       f"{av_sig['yt_trailer_views']:,}" if av_sig.get("yt_trailer_views") else "—",
                       delta="Full trailer not released" if not av_sig.get("full_trailer_out") else "Live")
 
-        r1, r2 = st.columns(2)
-        r1.metric("r/marvelstudios hot avg",
-                  f"{av_sig['reddit_hot_avg']:,.0f}" if av_sig.get("reddit_hot_avg") is not None else "—",
-                  delta="Upvote velocity")
-        r2.metric("r/marvelstudios posts/24h",
-                  str(av_sig["reddit_posts_24h"]) if av_sig.get("reddit_posts_24h") is not None else "—",
-                  delta="Post volume")
+        if av_sig.get("reddit_hot_avg") is not None or av_sig.get("reddit_posts_24h") is not None:
+            r1, r2 = st.columns(2)
+            r1.metric("r/marvelstudios hot avg",
+                      f"{av_sig['reddit_hot_avg']:,.0f}" if av_sig.get("reddit_hot_avg") is not None else "—",
+                      delta="Upvote velocity")
+            r2.metric("r/marvelstudios posts/24h",
+                      str(av_sig["reddit_posts_24h"]) if av_sig.get("reddit_posts_24h") is not None else "—",
+                      delta="Post volume")
 
         if len(teasers) >= 2 and teasers[0] > 0:
             decay_signal = cal.get("teaser_decay_signal", "neutral")
