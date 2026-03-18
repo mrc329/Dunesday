@@ -46,6 +46,8 @@ FALLBACK_SIGNALS = {
         "full_trailer_out":  False,
         "reddit_hot_avg":    None,  # avg score of top-25 hot posts in r/marvelstudios
         "reddit_posts_24h":  None,  # new posts referencing the film in last 24h
+        "wiki_views_7d":     None,  # Wikipedia pageviews last 7 days
+        "wiki_wow_pct":      None,  # week-over-week % change
     },
     "dune": {
         "trends_interest":   13,
@@ -55,6 +57,8 @@ FALLBACK_SIGNALS = {
         "alamo_rank":        1,
         "reddit_hot_avg":    None,  # avg score of top-25 hot posts in r/dune
         "reddit_posts_24h":  None,
+        "wiki_views_7d":     None,
+        "wiki_wow_pct":      None,
     },
     "spiderman": {
         "full_trailer_released": True,
@@ -470,6 +474,112 @@ def fetch_reddit_signals() -> dict:
         return {"status": "error", "message": str(e)}
 
 
+# ── WIKIPEDIA PAGEVIEWS FETCH ─────────────────────────────────────────────────
+
+# Wikipedia article titles for each film
+WIKIPEDIA_ARTICLES = {
+    "avengers": "Avengers:_Doomsday",
+    "dune":     "Dune:_Part_Three",
+}
+
+def fetch_wikipedia_pageviews(days: int = 30) -> dict:
+    """
+    Fetch daily Wikipedia pageview counts for both films.
+    Uses the free Wikimedia REST API — no key, no registration, works from cloud.
+
+    Returns total + last-7-day views and week-over-week % change per film.
+    """
+    try:
+        import requests
+
+        end   = datetime.date.today()
+        start = end - datetime.timedelta(days=days)
+
+        results = {}
+        for film, article in WIKIPEDIA_ARTICLES.items():
+            url = (
+                f"https://wikimedia.org/api/rest_v1/metrics/pageviews/per-article"
+                f"/en.wikipedia/all-access/all-agents/{article}/daily"
+                f"/{start.strftime('%Y%m%d')}/{end.strftime('%Y%m%d')}"
+            )
+            resp = requests.get(
+                url, timeout=10,
+                headers={"User-Agent": "dunesday/1.0 (box office research)"}
+            )
+            if resp.status_code != 200:
+                results[film] = None
+                continue
+
+            items = resp.json().get("items", [])
+            if not items:
+                results[film] = None
+                continue
+
+            views_by_day = [item["views"] for item in items]
+            total        = sum(views_by_day)
+            last_7       = sum(views_by_day[-7:])  if len(views_by_day) >= 7  else sum(views_by_day)
+            prev_7       = sum(views_by_day[-14:-7]) if len(views_by_day) >= 14 else None
+            wow_pct      = round((last_7 - prev_7) / prev_7 * 100, 1) if prev_7 else None
+
+            results[film] = {
+                "total_views":   total,
+                "last_7d_views": last_7,
+                "prev_7d_views": prev_7,
+                "wow_pct":       wow_pct,
+                "daily_avg":     round(total / len(views_by_day), 1),
+            }
+
+        return {
+            "status":      "ok",
+            "films":       results,
+            "period_days": days,
+            "fetched_at":  datetime.datetime.utcnow().isoformat(),
+        }
+
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
+def calibrate_from_wikipedia(last_7d_views: int, wow_pct: float, film: str) -> float:
+    """
+    Convert Wikipedia pageview data into audience score adjustment.
+
+    last_7d_views : total pageviews over the last 7 days
+    wow_pct       : week-over-week % change (positive = growing interest)
+    film          : "AVENGERS" or "DUNE"
+
+    Thresholds scaled to each film's expected baseline at this stage (9 months out).
+    Returns: float adjustment (-3 to +3)
+    """
+    if last_7d_views is None:
+        return 0.0
+
+    # Base adjustment from absolute view level
+    if film == "AVENGERS":
+        # ~2k/day = strong, ~1k/day = normal, <500/day = soft
+        if last_7d_views >= 14000:  base_adj = +2.0
+        elif last_7d_views >= 7000: base_adj = +1.0
+        elif last_7d_views >= 3000: base_adj =  0.0
+        else:                       base_adj = -1.0
+    else:  # DUNE — smaller fanbase, lower baseline expected
+        if last_7d_views >= 7000:   base_adj = +2.0
+        elif last_7d_views >= 3500: base_adj = +1.0
+        elif last_7d_views >= 1500: base_adj =  0.0
+        else:                       base_adj = -1.0
+
+    # Momentum adjustment from week-over-week trend
+    if wow_pct is not None:
+        if wow_pct >= 50:    mom_adj = +1.0   # surging
+        elif wow_pct >= 10:  mom_adj = +0.5   # growing
+        elif wow_pct >= -10: mom_adj =  0.0   # stable
+        elif wow_pct >= -30: mom_adj = -0.5   # cooling
+        else:                mom_adj = -1.0   # fading fast
+    else:
+        mom_adj = 0.0
+
+    return float(np.clip(base_adj + mom_adj, -3, 3))
+
+
 # ── MASTER FETCH + CALIBRATE ──────────────────────────────────────────────────
 
 def fetch_and_calibrate(base_dune_score: int = 87, base_av_score: int = 88) -> dict:
@@ -592,7 +702,31 @@ def fetch_and_calibrate(base_dune_score: int = 87, base_av_score: int = 88) -> d
         signals["_reddit_status"]  = reddit.get("status", "unavailable")
         signals["_reddit_message"] = reddit.get("message", "")
 
-    # ── 5. Spider-Man: BND trailer calibration ────────────────────────────────
+    # ── 5. Wikipedia pageviews ────────────────────────────────────────────────
+    wiki = fetch_wikipedia_pageviews()
+    if wiki.get("status") == "ok" and wiki.get("films"):
+        av_wiki   = wiki["films"].get("avengers") or {}
+        dune_wiki = wiki["films"].get("dune") or {}
+
+        av_wiki_adj   = calibrate_from_wikipedia(
+            av_wiki.get("last_7d_views"), av_wiki.get("wow_pct"), "AVENGERS"
+        )
+        dune_wiki_adj = calibrate_from_wikipedia(
+            dune_wiki.get("last_7d_views"), dune_wiki.get("wow_pct"), "DUNE"
+        )
+
+        av_adj   += av_wiki_adj
+        dune_adj += dune_wiki_adj
+        sources_used.append("Wikipedia")
+
+        signals["avengers"]["wiki_views_7d"] = av_wiki.get("last_7d_views")
+        signals["avengers"]["wiki_wow_pct"]  = av_wiki.get("wow_pct")
+        signals["dune"]["wiki_views_7d"]     = dune_wiki.get("last_7d_views")
+        signals["dune"]["wiki_wow_pct"]      = dune_wiki.get("wow_pct")
+    else:
+        sources_used.append("Wikipedia (unavailable)")
+
+    # ── 6. Spider-Man: BND trailer calibration ───────────────────────────────
     spidey_yt_id = YOUTUBE_VIDEO_IDS.get("spiderman_full")
     spidey_suggested_tier  = None
     spidey_trailer_fresh   = _is_fresh_trailer(signals.get("spiderman", {}).get("trailer_date"))
@@ -614,12 +748,12 @@ def fetch_and_calibrate(base_dune_score: int = 87, base_av_score: int = 88) -> d
         signals["spiderman"]["suggested_tier"] = spidey_suggested_tier
         sources_used.append("Spider-Man trailer (YouTube)")
 
-    # ── 6. Final calibrated scores ────────────────────────────────────────────
+    # ── 7. Final calibrated scores ────────────────────────────────────────────
     av_calibrated   = float(np.clip(base_av_score   + av_adj,   60, 100))
     dune_calibrated = float(np.clip(base_dune_score + dune_adj, 60, 100))
 
-    # Signal confidence — "high" requires all three live API sources
-    live_sources = {"YouTube API", "Google Trends", "Reddit API"}
+    # Signal confidence — "high" requires YouTube + Wikipedia at minimum
+    live_sources = {"YouTube API", "Wikipedia"}
     if live_sources.issubset(set(sources_used)) \
             and not any("fallback" in s for s in sources_used):
         confidence = "high"
@@ -666,5 +800,8 @@ def _build_notes(av_adj, dune_adj, trends, yt, reddit=None, spidey_tier=None) ->
 
     if not trends:
         notes.append("Google Trends unavailable — using fallback search interest values.")
+
+    if reddit and reddit.get("status") != "ok":
+        notes.append("Reddit unavailable — Wikipedia pageviews used as community interest proxy.")
 
     return " ".join(notes)
