@@ -491,6 +491,7 @@ tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
 with tab1:
     st.markdown(f"<p style='font-size:0.58rem; letter-spacing:2px; color:{P['dim']}; margin-bottom:10px;'>NET PROFIT BY SCENARIO — P10 / P50 / P90</p>",
                 unsafe_allow_html=True)
+    st.caption("Bar = P50 median outcome. Whiskers show P10 (downside, 10th percentile) and P90 (upside, 90th percentile) from 5,000 Monte Carlo trials. Convention follows standard financial analysis: P10 is pessimistic, P90 is optimistic.")
 
     sk_list   = list(SCENARIOS.keys())
     sc_labels = [SCENARIOS[sk]["label"] for sk in sk_list]
