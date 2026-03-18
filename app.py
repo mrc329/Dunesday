@@ -11,7 +11,8 @@ import datetime
 
 from model.config import FILM_PARAMS, IMAX_CONFIG
 from model.core import run_all_scenarios, imax_gap_summary, SCENARIOS
-from model.signals import fetch_and_calibrate, YOUTUBE_TRAILER_URLS
+from model.signals import (fetch_and_calibrate, YOUTUBE_TRAILER_URLS,
+                           YOUTUBE_VIDEO_IDS, fetch_youtube_views)
 
 # ── PAGE CONFIG ────────────────────────────────────────────────────────────────
 st.set_page_config(
@@ -293,6 +294,30 @@ def load_signals(base_dune: int, base_av: int):
     return fetch_and_calibrate(base_dune_score=base_dune, base_av_score=base_av)
 
 
+@st.cache_data(ttl=3600, show_spinner=False)
+def load_yt_stats() -> dict:
+    """Fetch per-video YouTube stats for all known trailer IDs."""
+    ids = [v for v in YOUTUBE_VIDEO_IDS.values() if v]
+    return fetch_youtube_views(video_ids=ids)
+
+
+# Reverse map: video_id → slot name (e.g. "399Ez7WHK5s" → "avengers_t1")
+_YT_ID_TO_SLOT = {v: k for k, v in YOUTUBE_VIDEO_IDS.items() if v}
+
+# Human-readable labels for each slot
+_YT_SLOT_LABELS = {
+    "avengers_t1":        "Avengers T1",
+    "avengers_t2":        "Avengers T2",
+    "avengers_t3":        "Avengers T3",
+    "avengers_t4":        "Avengers T4",
+    "avengers_countdown": "Avengers Countdown",
+    "dune_t1":            "Dune T1",
+}
+
+# Ordered teaser slots for decay chart
+_AV_TEASER_SLOTS = ["avengers_t1", "avengers_t2", "avengers_t3", "avengers_t4"]
+
+
 # ── SIDEBAR ───────────────────────────────────────────────────────────────────
 with st.sidebar:
     # Theme toggle — top of sidebar, before everything else
@@ -314,7 +339,8 @@ with st.sidebar:
     st.divider()
 
     with st.spinner("Fetching live signals..."):
-        signals = load_signals(base_dune_aud, base_av_aud)
+        signals  = load_signals(base_dune_aud, base_av_aud)
+        yt_stats = load_yt_stats()
 
     cal = signals["calibration"]
     confidence_icons = {"high": "🟢", "medium": "🟡", "low": "🔴"}
@@ -586,32 +612,63 @@ with tab3:
     </div>
     """, unsafe_allow_html=True)
 
+    # ── Parse YouTube API results ─────────────────────────────────────────────
+    yt_videos   = yt_stats.get("videos", {}) if yt_stats.get("status") == "ok" else {}
+    yt_live     = bool(yt_videos)
+    yt_fetched  = yt_stats.get("fetched_at", "")
+
+    def _yt_views_M(slot: str) -> float | None:
+        """Return YouTube view count in millions for a slot, or None."""
+        vid_id = YOUTUBE_VIDEO_IDS.get(slot)
+        if not vid_id or vid_id not in yt_videos:
+            return None
+        return yt_videos[vid_id]["views"] / 1_000_000
+
+    # Avengers teaser views — prefer YouTube live, fall back to X/Twitter
+    av_sig   = signals["avengers"]
+    dune_sig = signals["dune"]
+    yt_av_teasers = [_yt_views_M(s) for s in _AV_TEASER_SLOTS]
+    use_yt_teasers = any(v is not None for v in yt_av_teasers)
+
+    if use_yt_teasers:
+        teasers      = [v for v in yt_av_teasers if v is not None]
+        teaser_src   = "YouTube"
+    else:
+        teasers    = av_sig.get("teaser_views_x_M", [])
+        teaser_src = "X/Twitter"
+
     col_a, col_b = st.columns(2)
 
     with col_a:
         st.markdown(f"<span style='color:{P['av']}; font-size:0.82rem; font-weight:600; letter-spacing:2px;'>AVENGERS: DOOMSDAY</span>",
                     unsafe_allow_html=True)
 
-        av_sig  = signals["avengers"]
-        teasers = av_sig.get("teaser_views_x_M", [])
-
         if teasers:
-            labels = [f"T{i+1}" for i in range(len(teasers))]
+            # If YouTube has data, show all 4 slots (zero-fill any missing)
+            if use_yt_teasers:
+                labels_decay = [_YT_SLOT_LABELS[s].replace("Avengers ", "")
+                                for s in _AV_TEASER_SLOTS]
+                vals_decay   = [_yt_views_M(s) or 0.0 for s in _AV_TEASER_SLOTS]
+            else:
+                labels_decay = [f"T{i+1}" for i in range(len(teasers))]
+                vals_decay   = teasers
+
             fig_d = go.Figure()
             fig_d.add_trace(go.Bar(
-                x=labels, y=teasers,
+                x=labels_decay, y=vals_decay,
                 marker_color=P["av"],
-                text=[f"{v:.0f}M" for v in teasers],
+                text=[f"{v:.0f}M" for v in vals_decay],
                 textposition="outside",
                 textfont=dict(size=10, color=P["av"]),
+                cliponaxis=False,
                 showlegend=False,
             ))
             fig_d.add_trace(go.Scatter(
-                x=labels, y=teasers,
+                x=labels_decay, y=vals_decay,
                 line=dict(color=P["av"], dash="dot", width=1),
                 mode="lines", showlegend=False,
             ))
-            t1 = teasers[0]
+            t1 = vals_decay[0] if vals_decay[0] > 0 else 1
             fig_d.add_hline(
                 y=t1 * 0.77, line_dash="dash", line_width=0.8,
                 line_color=P["dune"], opacity=0.8,
@@ -626,7 +683,8 @@ with tab3:
             )
             fig_d.update_layout(**_layout(
                 P, outside_text=True,
-                title=dict(text="Teaser Decay — X/Twitter Views", font=dict(size=11), x=0),
+                title=dict(text=f"Teaser Decay — {teaser_src} Views",
+                           font=dict(size=11), x=0),
                 height=300, yaxis_title="Views (M)",
             ))
             st.plotly_chart(fig_d, use_container_width=True)
@@ -635,11 +693,23 @@ with tab3:
         m1.metric("Trends interest",
                   f"{av_sig.get('trends_interest', '—')}/100",
                   delta="Google Trends US")
-        m2.metric("YT trailer views",
-                  f"{av_sig['yt_trailer_views']:,}" if av_sig.get("yt_trailer_views") else "—",
-                  delta="Full trailer not released" if not av_sig.get("full_trailer_out") else "Live")
 
-        if len(teasers) >= 2:
+        # YouTube total views across all 4 teasers
+        if yt_live:
+            av_yt_total = sum(
+                yt_videos[YOUTUBE_VIDEO_IDS[s]]["views"]
+                for s in _AV_TEASER_SLOTS
+                if YOUTUBE_VIDEO_IDS.get(s) and YOUTUBE_VIDEO_IDS[s] in yt_videos
+            )
+            m2.metric("YT teaser views",
+                      f"{av_yt_total / 1_000_000:.0f}M" if av_yt_total else "—",
+                      delta=f"T1–T4 combined · {yt_fetched[:10]}")
+        else:
+            m2.metric("YT trailer views",
+                      f"{av_sig['yt_trailer_views']:,}" if av_sig.get("yt_trailer_views") else "—",
+                      delta="Full trailer not released" if not av_sig.get("full_trailer_out") else "Live")
+
+        if len(teasers) >= 2 and teasers[0] > 0:
             decay_signal = cal.get("teaser_decay_signal", "neutral")
             decay_color  = {
                 "strong":  P["dune"],
@@ -655,6 +725,7 @@ with tab3:
                 T1→T2: {teasers[0]:.0f}M → {teasers[1]:.0f}M
                 ({(teasers[1]/teasers[0]*100):.0f}% of T1)
                 {'— matches Love&Thunder pattern' if (teasers[1]/teasers[0]) < 0.55 else '— tracking neutral'}
+                &nbsp;·&nbsp; source: {teaser_src}
               </span>
             </div>
             """, unsafe_allow_html=True)
@@ -663,8 +734,18 @@ with tab3:
         st.markdown(f"<span style='color:{P['dune']}; font-size:0.82rem; font-weight:600; letter-spacing:2px;'>DUNE: PART THREE</span>",
                     unsafe_allow_html=True)
 
-        dune_sig = signals["dune"]
-        st.info("No trailer released. WB following Part Two marketing cadence — strategic delay.")
+        dune_yt_views = _yt_views_M("dune_t1")
+        dune_color    = P["dune"]
+        dune_dim      = P["dim"]
+        if dune_yt_views is not None:
+            st.markdown(
+                f"<div style='border-left:2px solid {dune_color}; padding:8px 14px; "
+                f"font-size:0.82rem; color:{dune_dim};'>"
+                f"Trailer live · <b style='color:{dune_color}'>{dune_yt_views:.0f}M</b> YouTube views</div>",
+                unsafe_allow_html=True,
+            )
+        else:
+            st.info("No trailer released. WB following Part Two marketing cadence — strategic delay.")
 
         m1, m2 = st.columns(2)
         m1.metric("Trends interest",
@@ -705,9 +786,48 @@ with tab3:
         st.caption("Dune's 13/100 vs Avengers 72/100 is marketing stage, not demand. "
                    "Dune has released zero promotional materials.")
 
+    # ── YouTube per-video stats table ─────────────────────────────────────────
+    if yt_live:
+        st.divider()
+        st.markdown(f"<p style='font-size:0.58rem; letter-spacing:2px; color:{P['dim']};'>YOUTUBE TRAILER VIEWS — LIVE DATA</p>",
+                    unsafe_allow_html=True)
+
+        yt_rows = []
+        for slot in list(_AV_TEASER_SLOTS) + ["avengers_countdown", "dune_t1"]:
+            vid_id = YOUTUBE_VIDEO_IDS.get(slot)
+            if not vid_id:
+                continue
+            label = _YT_SLOT_LABELS.get(slot, slot)
+            if vid_id in yt_videos:
+                vd = yt_videos[vid_id]
+                yt_rows.append({
+                    "Video":  label,
+                    "Title":  vd["title"][:60] + ("…" if len(vd["title"]) > 60 else ""),
+                    "Views":  f"{vd['views'] / 1_000_000:.1f}M",
+                    "Likes":  f"{vd['likes'] / 1_000:.0f}K",
+                })
+            else:
+                yt_rows.append({"Video": label, "Title": "—", "Views": "—", "Likes": "—"})
+
+        st.dataframe(pd.DataFrame(yt_rows), use_container_width=True, hide_index=True)
+
     st.divider()
     st.markdown(f"<p style='font-size:0.58rem; letter-spacing:2px; color:{P['dim']};'>HOW SIGNALS FEED THE MODEL</p>",
                 unsafe_allow_html=True)
+
+    # Build YouTube API row dynamically
+    if yt_live:
+        av_yt_sum = sum(
+            yt_videos[YOUTUBE_VIDEO_IDS[s]]["views"]
+            for s in _AV_TEASER_SLOTS
+            if YOUTUBE_VIDEO_IDS.get(s) and YOUTUBE_VIDEO_IDS[s] in yt_videos
+        )
+        yt_row_val    = f"Av {av_yt_sum/1_000_000:.0f}M (T1–T4)"
+        yt_row_status = "✓ Live"
+    else:
+        yt_row_val    = "—"
+        yt_row_status = ("⚠ Key needed" if yt_stats.get("status") == "no_key"
+                         else f"⚠ {yt_stats.get('status','unavailable')}")
 
     rows_sig = [
         ["Google Trends", "Search interest ratio",
@@ -715,10 +835,12 @@ with tab3:
          f"Av {cal['avengers_adj']:+.1f}pt / Dune {cal['dune_adj']:+.1f}pt",
          "✓ Live" if signals.get("source") == "live" else "⚠ Fallback"],
         ["Teaser decay", "T1→T2 view retention",
-         f"{teasers[0]:.0f}M → {teasers[1]:.0f}M ({teasers[1]/teasers[0]*100:.0f}%)" if len(teasers) >= 2 else "—",
-         f"Av {cal['avengers_adj']:+.1f}pt (decay component)", "✓ Manual"],
-        ["YouTube API", "Official trailer views", "—",
-         "Ready — add YOUTUBE_API_KEY to secrets", "⚠ Key needed"],
+         f"{teasers[0]:.0f}M → {teasers[1]:.0f}M ({teasers[1]/teasers[0]*100:.0f}%)"
+         if len(teasers) >= 2 and teasers[0] > 0 else "—",
+         f"Av {cal['avengers_adj']:+.1f}pt (decay component)",
+         f"✓ {teaser_src}"],
+        ["YouTube API", "Official trailer views", yt_row_val,
+         "Feeds teaser decay + audience score calibration", yt_row_status],
         ["Fandango presales", "Purchase intent", "Not open yet",
          "Opens Sept 2026", "⏳ Pending"],
     ]
@@ -727,19 +849,19 @@ with tab3:
         use_container_width=True, hide_index=True,
     )
 
-    with st.expander("🔑 Set up YouTube API key (5 min)"):
-        st.markdown("""
-        1. Go to [console.cloud.google.com](https://console.cloud.google.com)
-        2. Create project → Enable **YouTube Data API v3**
-        3. Credentials → Create API Key (free, 10k units/day)
-        4. In Streamlit Cloud: App Settings → Secrets → add:
-        ```toml
-        YOUTUBE_API_KEY = "your-key-here"
-        ```
-        Once added, view counts for official Marvel and WB trailers
-        will update automatically on every page load and feed the audience
-        score calibration.
-        """)
+    if yt_stats.get("status") == "no_key":
+        with st.expander("🔑 Set up YouTube API key (5 min)"):
+            st.markdown("""
+            1. Go to [console.cloud.google.com](https://console.cloud.google.com)
+            2. Create project → Enable **YouTube Data API v3**
+            3. Credentials → Create API Key (free, 10k units/day)
+            4. In Streamlit Cloud: App Settings → Secrets → add:
+            ```toml
+            YOUTUBE_API_KEY = "your-key-here"
+            ```
+            Once added, view counts for all trailers update automatically
+            on every page load and feed the audience score calibration.
+            """)
 
 
 # ── TAB 4: DISTRIBUTIONS ──────────────────────────────────────────────────────
