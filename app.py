@@ -438,13 +438,15 @@ with st.spinner("Running Monte Carlo..."):
 
 # ── HEADER ────────────────────────────────────────────────────────────────────
 st.markdown(f"""
-<div style='padding:4px 0 12px; border-bottom:1px solid {P['card_rule']}; margin-bottom:14px;'>
-  <span style='font-size:1.4rem; font-weight:700; letter-spacing:5px; color:{P['text']};'>
-    <span style='color:{P['dune']}'>DUNE</span>SDAY
+<div style='padding:4px 0 12px; border-bottom:1px solid {P['card_rule']}; margin-bottom:14px;
+            display:flex; align-items:baseline; gap:20px; flex-wrap:wrap;'>
+  <span style='font-size:2rem; font-weight:800; letter-spacing:-0.5px; line-height:1;
+               color:{P['text']}; font-family:Georgia, "Times New Roman", serif;'>
+    <span style='color:{P['dune']}'>Dune</span>sday
   </span>
-  <span style='color:{P['dim']}; font-size:0.62rem; letter-spacing:3px; margin-left:20px;
-               vertical-align:middle;'>
-    BOX OFFICE MODEL &nbsp;·&nbsp; DEC 18 2026 &nbsp;·&nbsp; LIVE SIGNALS
+  <span style='color:{P['dim']}; font-size:0.65rem; letter-spacing:2px;
+               text-transform:uppercase; line-height:1;'>
+    Box Office Model &nbsp;·&nbsp; Dec 18 2026 &nbsp;·&nbsp; Live Signals
   </span>
 </div>
 """, unsafe_allow_html=True)
