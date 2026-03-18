@@ -73,6 +73,47 @@ FILM_PARAMS = {
 WOM_SLOPE     = 0.0199
 WOM_INTERCEPT = -0.7748
 
+# ── WEEKLY DECAY BENCHMARKS ───────────────────────────────────────────────────
+# Index = week number (0 = OW, 1 = wk2, ... 6 = wk7)
+# Values = fraction of OW gross retained that week
+WEEKLY_DECAY_BENCHMARKS = {
+    "Endgame (strong)":    [1.00, 0.68, 0.53, 0.41, 0.33, 0.26, 0.21],
+    "D&W / held well":     [1.00, 0.62, 0.49, 0.38, 0.30, 0.24, 0.19],
+    "Neutral MCU":         [1.00, 0.56, 0.43, 0.34, 0.27, 0.22, 0.18],
+    "Love&Thunder (soft)": [1.00, 0.47, 0.35, 0.26, 0.19, 0.14, 0.11],
+}
+
+# ── AUDIENCE SCORE BENCHMARKS — for sidebar display ───────────────────────────
+AUDIENCE_SCORE_BENCHMARKS = [
+    ("Deadpool & Wolverine", 2024, 95, "AVENGERS"),
+    ("Endgame",              2019, 91, "AVENGERS"),
+    ("Infinity War",         2019, 91, "AVENGERS"),
+    ("Dune: Part Two",       2024, 89, "DUNE"),
+    ("Dune: Part One",       2021, 90, "DUNE"),
+    ("Doctor Strange MoM",   2022, 74, "AVENGERS"),
+    ("Thor: Love & Thunder", 2022, 76, "AVENGERS"),
+    ("Black Adam",           2022, 72, "AVENGERS"),
+]
+
+# ── SPIDER-MAN COMPETITIVE IMPACT ─────────────────────────────────────────────
+# Spider-Man: Brand New Day (Sony/MCU) expected Jul 25 2026.
+# Its performance affects Avengers audience score as an MCU brand signal.
+SPIDEY_IMPACT_ADJ = {
+    "Disappoints": -5,   # MCU brand damage heading into Dec
+    "Soft":        -2,
+    "Neutral":      0,
+    "Strong":      +2,   # MCU brand uplift, audiences primed
+    "Blockbuster": +4,   # sets record — Avengers hype amplified
+}
+# Also affects Avengers OW gross multiplier via marketing saturation
+SPIDEY_OW_MULT = {
+    "Disappoints": 0.90,
+    "Soft":        0.95,
+    "Neutral":     1.00,
+    "Strong":      1.05,
+    "Blockbuster": 1.10,
+}
+
 # ── CALENDAR HOLIDAY MULTIPLIERS ─────────────────────────────────────────────
 # Applied on top of day-of-week baseline
 HOLIDAY_OVERRIDES = {

@@ -9,9 +9,12 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import datetime
 
-from model.config import FILM_PARAMS, IMAX_CONFIG
+from model.config import (FILM_PARAMS, IMAX_CONFIG,
+                          AUDIENCE_SCORE_BENCHMARKS,
+                          SPIDEY_IMPACT_ADJ, WEEKLY_DECAY_BENCHMARKS)
 from model.core import run_all_scenarios, imax_gap_summary, SCENARIOS
-from model.signals import fetch_and_calibrate
+from model.signals import (fetch_and_calibrate, YOUTUBE_TRAILER_URLS,
+                           YOUTUBE_VIDEO_IDS, fetch_youtube_views)
 
 # ── PAGE CONFIG ────────────────────────────────────────────────────────────────
 st.set_page_config(
@@ -193,6 +196,31 @@ def build_css(P: dict) -> str:
   /* ── dataframe ── */
   [data-testid="stDataFrame"] {{ font-size: 0.78rem !important; }}
 
+  /* ── plotly — prevent bar labels from clipping at chart boundary ── */
+  .js-plotly-plot .plotly .main-svg {{
+    overflow: visible !important;
+  }}
+  .js-plotly-plot .plotly {{
+    overflow: visible !important;
+  }}
+
+  /* ── video embeds — full-width, consistent aspect ratio ── */
+  [data-testid="stVideo"] {{
+    width: 100% !important;
+  }}
+  [data-testid="stVideo"] iframe,
+  [data-testid="stVideo"] video {{
+    width: 100% !important;
+    aspect-ratio: 16/9 !important;
+    height: auto !important;
+    border: none !important;
+  }}
+
+  /* ── tab content — ensure no section collides with the tab bar ── */
+  .stTabs [data-baseweb="tab-panel"] {{
+    padding-top: 16px !important;
+  }}
+
   /* ── toggle / slider labels ── */
   [data-testid="stToggleLabel"] p,
   [data-testid="stSliderLabel"] p,
@@ -223,8 +251,12 @@ if not _qs_theme:
 
 
 # ── CHART LAYOUT HELPER ────────────────────────────────────────────────────────
-def _layout(P: dict, **kw) -> dict:
-    """Tufte-style Plotly base layout — transparent bg, no gridlines."""
+def _layout(P: dict, outside_text: bool = False, **kw) -> dict:
+    """Tufte-style Plotly base layout — transparent bg, no gridlines.
+
+    outside_text=True adds extra top margin so textposition='outside' bars
+    are never clipped by the chart frame.
+    """
     base = dict(
         plot_bgcolor="rgba(0,0,0,0)",
         paper_bgcolor=P["bg"],
@@ -237,7 +269,7 @@ def _layout(P: dict, **kw) -> dict:
             y=1.04,
             x=0,
         ),
-        margin=dict(t=20, b=10, l=4, r=8),
+        margin=dict(t=44 if outside_text else 20, b=30, l=48, r=16),
         xaxis=dict(
             showgrid=False,
             showline=True,
@@ -264,6 +296,30 @@ def load_signals(base_dune: int, base_av: int):
     return fetch_and_calibrate(base_dune_score=base_dune, base_av_score=base_av)
 
 
+@st.cache_data(ttl=3600, show_spinner=False)
+def load_yt_stats() -> dict:
+    """Fetch per-video YouTube stats for all known trailer IDs."""
+    ids = [v for v in YOUTUBE_VIDEO_IDS.values() if v]
+    return fetch_youtube_views(video_ids=ids)
+
+
+# Reverse map: video_id → slot name (e.g. "399Ez7WHK5s" → "avengers_t1")
+_YT_ID_TO_SLOT = {v: k for k, v in YOUTUBE_VIDEO_IDS.items() if v}
+
+# Human-readable labels for each slot
+_YT_SLOT_LABELS = {
+    "avengers_t1":        "Avengers T1",
+    "avengers_t2":        "Avengers T2",
+    "avengers_t3":        "Avengers T3",
+    "avengers_t4":        "Avengers T4",
+    "avengers_countdown": "Avengers Countdown",
+    "dune_t1":            "Dune T1",
+}
+
+# Ordered teaser slots for decay chart
+_AV_TEASER_SLOTS = ["avengers_t1", "avengers_t2", "avengers_t3", "avengers_t4"]
+
+
 # ── SIDEBAR ───────────────────────────────────────────────────────────────────
 with st.sidebar:
     # Theme toggle — top of sidebar, before everything else
@@ -278,14 +334,29 @@ with st.sidebar:
     st.markdown("### ⚙️ Model Controls")
 
     st.markdown("**Base Audience Scores**")
-    st.caption("Live signals auto-calibrate from these baselines")
+    st.caption(
+        "PostTrak/CinemaScore-style satisfaction index (0–100). "
+        "Live signals auto-calibrate from these baselines."
+    )
     base_dune_aud = st.slider("Dune base score", 60, 100, 87)
     base_av_aud   = st.slider("Avengers base score", 60, 100, 88)
+
+    with st.expander("Score benchmarks"):
+        bm_rows = [
+            {"Film": f"{t} ({yr})", "Score": s,
+             "Film group": g.title()}
+            for t, yr, s, g in sorted(
+                AUDIENCE_SCORE_BENCHMARKS, key=lambda x: -x[2]
+            )
+        ]
+        st.dataframe(pd.DataFrame(bm_rows), hide_index=True,
+                     use_container_width=True)
 
     st.divider()
 
     with st.spinner("Fetching live signals..."):
-        signals = load_signals(base_dune_aud, base_av_aud)
+        signals  = load_signals(base_dune_aud, base_av_aud)
+        yt_stats = load_yt_stats()
 
     cal = signals["calibration"]
     confidence_icons = {"high": "🟢", "medium": "🟡", "low": "🔴"}
@@ -316,12 +387,28 @@ with st.sidebar:
         st.caption("⚠️ Overriding live calibration")
     else:
         dune_aud = int(cal["dune_calibrated"])
-        av_aud   = int(cal["avengers_calibrated"])
+        # Apply Spider-Man MCU brand signal on top of live calibration
+        av_aud   = int(np.clip(cal["avengers_calibrated"] + spidey_adj, 60, 100))
 
     st.divider()
     st.markdown("**International Multipliers**")
     dune_intl = st.slider("Dune intl mult", 0.8, 2.5, 1.48, 0.05)
     av_intl   = st.slider("Avengers intl mult", 1.0, 3.5, 2.18, 0.05)
+
+    st.markdown("**Competitor Signals**")
+    spidey_tier = st.select_slider(
+        "Spider-Man: Brand New Day (Jul 25 2026)",
+        options=["Disappoints", "Soft", "Neutral", "Strong", "Blockbuster"],
+        value="Neutral",
+    )
+    spidey_adj = SPIDEY_IMPACT_ADJ[spidey_tier]
+    spidey_color = (P["av"] if spidey_adj < 0 else
+                    P["dune"] if spidey_adj > 0 else P["dim"])
+    st.caption(
+        f"MCU brand signal → Avengers score "
+        f"**{spidey_adj:+d} pts** · OW mult "
+        f"{'↑' if spidey_adj > 0 else '↓' if spidey_adj < 0 else '—'}"
+    )
 
     st.markdown("**Simulation**")
     n_trials = st.select_slider("MC trials", [500, 1000, 2000, 5000], value=1000)
@@ -344,19 +431,22 @@ with st.spinner("Running Monte Carlo..."):
         n=n_trials,
         dune_aud=dune_aud, av_aud=av_aud,
         dune_intl=dune_intl, av_intl=av_intl,
+        spidey_tier=spidey_tier,
     )
     imax = imax_gap_summary()
 
 
 # ── HEADER ────────────────────────────────────────────────────────────────────
 st.markdown(f"""
-<div style='padding:4px 0 12px; border-bottom:1px solid {P['card_rule']}; margin-bottom:14px;'>
-  <span style='font-size:1.4rem; font-weight:700; letter-spacing:5px; color:{P['text']};'>
-    <span style='color:{P['dune']}'>DUNE</span>SDAY
+<div style='padding:4px 0 12px; border-bottom:1px solid {P['card_rule']}; margin-bottom:14px;
+            display:flex; align-items:baseline; gap:20px; flex-wrap:wrap;'>
+  <span style='font-size:2rem; font-weight:800; letter-spacing:-0.5px; line-height:1;
+               color:{P['text']}; font-family:Georgia, "Times New Roman", serif;'>
+    <span style='color:{P['dune']}'>Dune</span>sday
   </span>
-  <span style='color:{P['dim']}; font-size:0.62rem; letter-spacing:3px; margin-left:20px;
-               vertical-align:middle;'>
-    BOX OFFICE MODEL &nbsp;·&nbsp; DEC 18 2026 &nbsp;·&nbsp; LIVE SIGNALS
+  <span style='color:{P['dim']}; font-size:0.65rem; letter-spacing:2px;
+               text-transform:uppercase; line-height:1;'>
+    Box Office Model &nbsp;·&nbsp; Dec 18 2026 &nbsp;·&nbsp; Live Signals
   </span>
 </div>
 """, unsafe_allow_html=True)
@@ -387,8 +477,8 @@ st.divider()
 
 
 # ── TABS ──────────────────────────────────────────────────────────────────────
-tab1, tab2, tab3, tab4, tab5 = st.tabs([
-    "SCENARIOS", "IMAX TIMELINE", "LIVE SIGNALS", "DISTRIBUTIONS", "DISNEY DECISION",
+tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+    "SCENARIOS", "IMAX TIMELINE", "LIVE SIGNALS", "DISTRIBUTIONS", "DISNEY DECISION", "TRAILERS",
 ])
 
 
@@ -413,6 +503,7 @@ with tab1:
         text=[f"${v:.0f}M" for v in dune_p50s],
         textposition="outside",
         textfont=dict(size=10, color=P["dune"]),
+        cliponaxis=False,
         error_y=dict(
             type="data", symmetric=False,
             array=[p90 - p50 for p90, p50 in zip(dune_p90s, dune_p50s)],
@@ -426,6 +517,7 @@ with tab1:
         text=[f"${v:.0f}M" for v in av_p50s],
         textposition="outside",
         textfont=dict(size=10, color=P["av"]),
+        cliponaxis=False,
         error_y=dict(
             type="data", symmetric=False,
             array=[p90 - p50 for p90, p50 in zip(av_p90s, av_p50s)],
@@ -434,7 +526,9 @@ with tab1:
         ),
     ))
     fig.add_hline(y=0, line_width=0.5, line_color=P["axis"])
-    fig.update_layout(**_layout(P, barmode="group", height=390, yaxis_title="Net Profit ($M)"))
+    fig.update_layout(**_layout(P, outside_text=True,
+                                barmode="group", height=420,
+                                yaxis_title="Net Profit ($M)"))
     st.plotly_chart(fig, use_container_width=True)
 
     rows = []
@@ -512,8 +606,8 @@ with tab2:
                 xanchor="center",
             )
 
-    fig2.update_layout(**_layout(P, height=480, barmode="stack",
-                                 margin=dict(t=32, b=10, l=4, r=8)))
+    fig2.update_layout(**_layout(P, height=520, barmode="stack",
+                                 margin=dict(t=44, b=40, l=52, r=16)))
     fig2.update_xaxes(tickangle=45, nticks=15, showgrid=False,
                       showline=True, linecolor=P["axis"], linewidth=0.5)
     fig2.update_yaxes(showgrid=False, showline=False, zeroline=False)
@@ -553,32 +647,63 @@ with tab3:
     </div>
     """, unsafe_allow_html=True)
 
+    # ── Parse YouTube API results ─────────────────────────────────────────────
+    yt_videos   = yt_stats.get("videos", {}) if yt_stats.get("status") == "ok" else {}
+    yt_live     = bool(yt_videos)
+    yt_fetched  = yt_stats.get("fetched_at", "")
+
+    def _yt_views_M(slot: str) -> float | None:
+        """Return YouTube view count in millions for a slot, or None."""
+        vid_id = YOUTUBE_VIDEO_IDS.get(slot)
+        if not vid_id or vid_id not in yt_videos:
+            return None
+        return yt_videos[vid_id]["views"] / 1_000_000
+
+    # Avengers teaser views — prefer YouTube live, fall back to X/Twitter
+    av_sig   = signals["avengers"]
+    dune_sig = signals["dune"]
+    yt_av_teasers = [_yt_views_M(s) for s in _AV_TEASER_SLOTS]
+    use_yt_teasers = any(v is not None for v in yt_av_teasers)
+
+    if use_yt_teasers:
+        teasers      = [v for v in yt_av_teasers if v is not None]
+        teaser_src   = "YouTube"
+    else:
+        teasers    = av_sig.get("teaser_views_x_M", [])
+        teaser_src = "X/Twitter"
+
     col_a, col_b = st.columns(2)
 
     with col_a:
         st.markdown(f"<span style='color:{P['av']}; font-size:0.82rem; font-weight:600; letter-spacing:2px;'>AVENGERS: DOOMSDAY</span>",
                     unsafe_allow_html=True)
 
-        av_sig  = signals["avengers"]
-        teasers = av_sig.get("teaser_views_x_M", [])
-
         if teasers:
-            labels = [f"T{i+1}" for i in range(len(teasers))]
+            # If YouTube has data, show all 4 slots (zero-fill any missing)
+            if use_yt_teasers:
+                labels_decay = [_YT_SLOT_LABELS[s].replace("Avengers ", "")
+                                for s in _AV_TEASER_SLOTS]
+                vals_decay   = [_yt_views_M(s) or 0.0 for s in _AV_TEASER_SLOTS]
+            else:
+                labels_decay = [f"T{i+1}" for i in range(len(teasers))]
+                vals_decay   = teasers
+
             fig_d = go.Figure()
             fig_d.add_trace(go.Bar(
-                x=labels, y=teasers,
+                x=labels_decay, y=vals_decay,
                 marker_color=P["av"],
-                text=[f"{v:.0f}M" for v in teasers],
+                text=[f"{v:.0f}M" for v in vals_decay],
                 textposition="outside",
                 textfont=dict(size=10, color=P["av"]),
+                cliponaxis=False,
                 showlegend=False,
             ))
             fig_d.add_trace(go.Scatter(
-                x=labels, y=teasers,
+                x=labels_decay, y=vals_decay,
                 line=dict(color=P["av"], dash="dot", width=1),
                 mode="lines", showlegend=False,
             ))
-            t1 = teasers[0]
+            t1 = vals_decay[0] if vals_decay[0] > 0 else 1
             fig_d.add_hline(
                 y=t1 * 0.77, line_dash="dash", line_width=0.8,
                 line_color=P["dune"], opacity=0.8,
@@ -592,9 +717,10 @@ with tab3:
                 annotation_font_color=P["mid_ref"], annotation_font_size=9,
             )
             fig_d.update_layout(**_layout(
-                P,
-                title=dict(text="Teaser Decay — X/Twitter Views", font=dict(size=11), x=0),
-                height=260, yaxis_title="Views (M)",
+                P, outside_text=True,
+                title=dict(text=f"Teaser Decay — {teaser_src} Views",
+                           font=dict(size=11), x=0),
+                height=300, yaxis_title="Views (M)",
             ))
             st.plotly_chart(fig_d, use_container_width=True)
 
@@ -602,19 +728,32 @@ with tab3:
         m1.metric("Trends interest",
                   f"{av_sig.get('trends_interest', '—')}/100",
                   delta="Google Trends US")
-        m2.metric("YT trailer views",
-                  f"{av_sig['yt_trailer_views']:,}" if av_sig.get("yt_trailer_views") else "—",
-                  delta="Full trailer not released" if not av_sig.get("full_trailer_out") else "Live")
 
-        r1, r2 = st.columns(2)
-        r1.metric("r/marvelstudios hot avg",
-                  f"{av_sig['reddit_hot_avg']:,.0f}" if av_sig.get("reddit_hot_avg") is not None else "—",
-                  delta="Upvote velocity")
-        r2.metric("r/marvelstudios posts/24h",
-                  str(av_sig["reddit_posts_24h"]) if av_sig.get("reddit_posts_24h") is not None else "—",
-                  delta="Post volume")
+        # YouTube total views across all 4 teasers
+        if yt_live:
+            av_yt_total = sum(
+                yt_videos[YOUTUBE_VIDEO_IDS[s]]["views"]
+                for s in _AV_TEASER_SLOTS
+                if YOUTUBE_VIDEO_IDS.get(s) and YOUTUBE_VIDEO_IDS[s] in yt_videos
+            )
+            m2.metric("YT teaser views",
+                      f"{av_yt_total / 1_000_000:.0f}M" if av_yt_total else "—",
+                      delta=f"T1–T4 combined · {yt_fetched[:10]}")
+        else:
+            m2.metric("YT trailer views",
+                      f"{av_sig['yt_trailer_views']:,}" if av_sig.get("yt_trailer_views") else "—",
+                      delta="Full trailer not released" if not av_sig.get("full_trailer_out") else "Live")
 
-        if len(teasers) >= 2:
+        if av_sig.get("reddit_hot_avg") is not None or av_sig.get("reddit_posts_24h") is not None:
+            r1, r2 = st.columns(2)
+            r1.metric("r/marvelstudios hot avg",
+                      f"{av_sig['reddit_hot_avg']:,.0f}" if av_sig.get("reddit_hot_avg") is not None else "—",
+                      delta="Upvote velocity")
+            r2.metric("r/marvelstudios posts/24h",
+                      str(av_sig["reddit_posts_24h"]) if av_sig.get("reddit_posts_24h") is not None else "—",
+                      delta="Post volume")
+
+        if len(teasers) >= 2 and teasers[0] > 0:
             decay_signal = cal.get("teaser_decay_signal", "neutral")
             decay_color  = {
                 "strong":  P["dune"],
@@ -630,6 +769,7 @@ with tab3:
                 T1→T2: {teasers[0]:.0f}M → {teasers[1]:.0f}M
                 ({(teasers[1]/teasers[0]*100):.0f}% of T1)
                 {'— matches Love&Thunder pattern' if (teasers[1]/teasers[0]) < 0.55 else '— tracking neutral'}
+                &nbsp;·&nbsp; source: {teaser_src}
               </span>
             </div>
             """, unsafe_allow_html=True)
@@ -638,8 +778,18 @@ with tab3:
         st.markdown(f"<span style='color:{P['dune']}; font-size:0.82rem; font-weight:600; letter-spacing:2px;'>DUNE: PART THREE</span>",
                     unsafe_allow_html=True)
 
-        dune_sig = signals["dune"]
-        st.info("No trailer released. WB following Part Two marketing cadence — strategic delay.")
+        dune_yt_views = _yt_views_M("dune_t1")
+        dune_color    = P["dune"]
+        dune_dim      = P["dim"]
+        if dune_yt_views is not None:
+            st.markdown(
+                f"<div style='border-left:2px solid {dune_color}; padding:8px 14px; "
+                f"font-size:0.82rem; color:{dune_dim};'>"
+                f"Trailer live · <b style='color:{dune_color}'>{dune_yt_views:.0f}M</b> YouTube views</div>",
+                unsafe_allow_html=True,
+            )
+        else:
+            st.info("No trailer released. WB following Part Two marketing cadence — strategic delay.")
 
         m1, m2 = st.columns(2)
         m1.metric("Trends interest",
@@ -682,15 +832,137 @@ with tab3:
             annotation_text="Expected Dune baseline (no trailer)",
             annotation_font_color=P["dune"], annotation_font_size=9,
         )
-        fig_ratio.update_layout(**_layout(P, barmode="stack", height=180, yaxis_title="%"))
+        fig_ratio.update_layout(**_layout(P, barmode="stack", height=260, yaxis_title="%"))
         st.plotly_chart(fig_ratio, use_container_width=True)
 
         st.caption("Dune's 13/100 vs Avengers 72/100 is marketing stage, not demand. "
                    "Dune has released zero promotional materials.")
 
+    # ── YouTube per-video stats table ─────────────────────────────────────────
+    if yt_live:
+        st.divider()
+        st.markdown(f"<p style='font-size:0.58rem; letter-spacing:2px; color:{P['dim']};'>YOUTUBE TRAILER VIEWS — LIVE DATA</p>",
+                    unsafe_allow_html=True)
+
+        yt_rows = []
+        for slot in list(_AV_TEASER_SLOTS) + ["avengers_countdown", "dune_t1"]:
+            vid_id = YOUTUBE_VIDEO_IDS.get(slot)
+            if not vid_id:
+                continue
+            label = _YT_SLOT_LABELS.get(slot, slot)
+            if vid_id in yt_videos:
+                vd = yt_videos[vid_id]
+                yt_rows.append({
+                    "Video":  label,
+                    "Title":  vd["title"][:60] + ("…" if len(vd["title"]) > 60 else ""),
+                    "Views":  f"{vd['views'] / 1_000_000:.1f}M",
+                    "Likes":  f"{vd['likes'] / 1_000:.0f}K",
+                })
+            else:
+                yt_rows.append({"Video": label, "Title": "—", "Views": "—", "Likes": "—"})
+
+        st.dataframe(pd.DataFrame(yt_rows), use_container_width=True, hide_index=True)
+
+    # ── Avengers Projected Decay Rate ─────────────────────────────────────────
+    st.divider()
+    st.markdown(
+        f"<p style='font-size:0.58rem; letter-spacing:2px; color:{P['dim']};'>"
+        "AVENGERS: PROJECTED WEEKLY HOLD CURVE</p>",
+        unsafe_allow_html=True,
+    )
+
+    wk_labels = ["OW", "Wk 2", "Wk 3", "Wk 4", "Wk 5", "Wk 6", "Wk 7"]
+
+    # Build projected curve from calibrated audience score via WOM
+    from model.core import wom_mult as _wom_mult
+    wm_proj  = float(np.clip(_wom_mult(av_aud), 0.5, 1.5))
+    base_holds = [1.00, 0.56, 0.43, 0.34, 0.27, 0.22, 0.18]
+    proj_holds = [base_holds[0]] + [
+        float(np.clip(h * wm_proj, 0.05, 1.05))
+        for h in base_holds[1:]
+    ]
+    proj_pct = [v * 100 for v in proj_holds]
+
+    fig_decay = go.Figure()
+
+    # Benchmark bands (light, background first)
+    bench_styles = {
+        "Endgame (strong)":    dict(dash="dot",   color=P["dune"],    opacity=0.55),
+        "D&W / held well":     dict(dash="dot",   color=P["dune"],    opacity=0.30),
+        "Neutral MCU":         dict(dash="dash",  color=P["mid_ref"], opacity=0.70),
+        "Love&Thunder (soft)": dict(dash="dot",   color=P["av"],      opacity=0.55),
+    }
+    for bname, bvals in WEEKLY_DECAY_BENCHMARKS.items():
+        sty = bench_styles[bname]
+        fig_decay.add_trace(go.Scatter(
+            x=wk_labels, y=[v * 100 for v in bvals],
+            name=bname,
+            mode="lines",
+            line=dict(dash=sty["dash"], color=sty["color"],
+                      width=1.2),
+            opacity=sty["opacity"],
+        ))
+
+    # Projected curve — prominent
+    fig_decay.add_trace(go.Scatter(
+        x=wk_labels, y=proj_pct,
+        name=f"Projected (score {av_aud})",
+        mode="lines+markers",
+        line=dict(color=P["av"], width=2.5),
+        marker=dict(size=6, color=P["av"]),
+    ))
+
+    # Annotate each projected point
+    for i, (lbl, val) in enumerate(zip(wk_labels, proj_pct)):
+        if i == 0:
+            continue
+        fig_decay.add_annotation(
+            x=lbl, y=val,
+            text=f"{val:.0f}%",
+            font=dict(color=P["av"], size=9),
+            showarrow=False,
+            yanchor="bottom",
+            yshift=6,
+        )
+
+    fig_decay.update_layout(**_layout(
+        P, outside_text=True,
+        height=300,
+        yaxis_title="% of OW gross",
+        yaxis_ticksuffix="%",
+        yaxis_range=[0, 115],
+        legend=dict(bgcolor="rgba(0,0,0,0)", borderwidth=0,
+                    font=dict(size=9), orientation="h", y=1.06, x=0),
+    ))
+    st.plotly_chart(fig_decay, use_container_width=True)
+
+    # Decay delta vs neutral
+    delta_vs_neutral = proj_pct[1] - WEEKLY_DECAY_BENCHMARKS["Neutral MCU"][1] * 100
+    decay_note_color = P["dune"] if delta_vs_neutral >= 0 else P["av"]
+    st.caption(
+        f"Wk 2 hold projected at **{proj_pct[1]:.0f}%** of OW "
+        f"({delta_vs_neutral:+.0f}% vs neutral MCU) "
+        f"· WOM multiplier {wm_proj:.2f}× · audience score {av_aud}"
+        + (f" (incl. Spider-Man {spidey_adj:+d}pt)" if spidey_adj != 0 else "")
+    )
+
     st.divider()
     st.markdown(f"<p style='font-size:0.58rem; letter-spacing:2px; color:{P['dim']};'>HOW SIGNALS FEED THE MODEL</p>",
                 unsafe_allow_html=True)
+
+    # Build YouTube API row dynamically
+    if yt_live:
+        av_yt_sum = sum(
+            yt_videos[YOUTUBE_VIDEO_IDS[s]]["views"]
+            for s in _AV_TEASER_SLOTS
+            if YOUTUBE_VIDEO_IDS.get(s) and YOUTUBE_VIDEO_IDS[s] in yt_videos
+        )
+        yt_row_val    = f"Av {av_yt_sum/1_000_000:.0f}M (T1–T4)"
+        yt_row_status = "✓ Live"
+    else:
+        yt_row_val    = "—"
+        yt_row_status = ("⚠ Key needed" if yt_stats.get("status") == "no_key"
+                         else f"⚠ {yt_stats.get('status','unavailable')}")
 
     rows_sig = [
         ["Google Trends", "Search interest ratio",
@@ -698,10 +970,12 @@ with tab3:
          f"Av {cal['avengers_adj']:+.1f}pt / Dune {cal['dune_adj']:+.1f}pt",
          "✓ Live" if signals.get("source") == "live" else "⚠ Fallback"],
         ["Teaser decay", "T1→T2 view retention",
-         f"{teasers[0]:.0f}M → {teasers[1]:.0f}M ({teasers[1]/teasers[0]*100:.0f}%)" if len(teasers) >= 2 else "—",
-         f"Av {cal['avengers_adj']:+.1f}pt (decay component)", "✓ Manual"],
-        ["YouTube API", "Official trailer views", "—",
-         "Ready — add YOUTUBE_API_KEY to secrets", "⚠ Key needed"],
+         f"{teasers[0]:.0f}M → {teasers[1]:.0f}M ({teasers[1]/teasers[0]*100:.0f}%)"
+         if len(teasers) >= 2 and teasers[0] > 0 else "—",
+         f"Av {cal['avengers_adj']:+.1f}pt (decay component)",
+         f"✓ {teaser_src}"],
+        ["YouTube API", "Official trailer views", yt_row_val,
+         "Feeds teaser decay + audience score calibration", yt_row_status],
         ["Reddit API",
          "Post volume + upvote velocity",
          f"r/marvelstudios {av_sig.get('reddit_hot_avg') or '—'} avg / "
@@ -718,19 +992,19 @@ with tab3:
         use_container_width=True, hide_index=True,
     )
 
-    with st.expander("🔑 Set up YouTube API key (5 min)"):
-        st.markdown("""
-        1. Go to [console.cloud.google.com](https://console.cloud.google.com)
-        2. Create project → Enable **YouTube Data API v3**
-        3. Credentials → Create API Key (free, 10k units/day)
-        4. In Streamlit Cloud: App Settings → Secrets → add:
-        ```toml
-        YOUTUBE_API_KEY = "your-key-here"
-        ```
-        Once added, view counts for official Marvel and WB trailers
-        will update automatically on every page load and feed the audience
-        score calibration.
-        """)
+    if yt_stats.get("status") == "no_key":
+        with st.expander("🔑 Set up YouTube API key (5 min)"):
+            st.markdown("""
+            1. Go to [console.cloud.google.com](https://console.cloud.google.com)
+            2. Create project → Enable **YouTube Data API v3**
+            3. Credentials → Create API Key (free, 10k units/day)
+            4. In Streamlit Cloud: App Settings → Secrets → add:
+            ```toml
+            YOUTUBE_API_KEY = "your-key-here"
+            ```
+            Once added, view counts for all trailers update automatically
+            on every page load and feed the audience score calibration.
+            """)
 
     with st.expander("🔑 Set up Reddit API credentials (5 min)"):
         st.markdown("""
@@ -781,7 +1055,7 @@ with tab4:
         annotation_font_color=P["mid_ref"], annotation_font_size=9,
     )
     fig4.update_layout(**_layout(
-        P, barmode="overlay", height=380,
+        P, barmode="overlay", height=400,
         xaxis_title="Net Profit ($M)", yaxis_title="Probability Density",
     ))
     st.plotly_chart(fig4, use_container_width=True)
@@ -841,7 +1115,8 @@ with tab5:
         textfont=dict(size=11, color=P["chart_font"]),
     ))
     fig5.add_hline(y=0, line_width=0.5, line_color=P["axis"])
-    fig5.update_layout(**_layout(P, height=280, yaxis_title="%", yaxis_range=[0, 50]))
+    fig5.update_layout(**_layout(P, outside_text=True,
+                                 height=320, yaxis_title="%", yaxis_range=[0, 55]))
     st.plotly_chart(fig5, use_container_width=True)
     st.dataframe(pd.DataFrame(prob_data), use_container_width=True, hide_index=True)
 
@@ -861,6 +1136,80 @@ with tab5:
     </span>
     </div>
     """, unsafe_allow_html=True)
+
+
+# ── TAB 6: TRAILERS ───────────────────────────────────────────────────────────
+with tab6:
+    st.markdown(
+        f"<p style='font-size:0.58rem; letter-spacing:2px; color:{P['dim']}; margin-bottom:16px;'>"
+        "OFFICIAL TRAILERS — EMBEDDED FROM YOUTUBE</p>",
+        unsafe_allow_html=True,
+    )
+
+    # ── Avengers: Doomsday ────────────────────────────────────────────────────
+    st.markdown(
+        f"<span style='color:{P['av']}; font-size:0.82rem; font-weight:600; "
+        f"letter-spacing:2px;'>AVENGERS: DOOMSDAY</span>",
+        unsafe_allow_html=True,
+    )
+    st.markdown(f"<hr style='border-color:{P['card_rule']}; margin:6px 0 14px;'>",
+                unsafe_allow_html=True)
+
+    # Row 1: T1 + T2
+    a1, a2 = st.columns(2)
+    with a1:
+        st.caption("Teaser 1")
+        st.video(YOUTUBE_TRAILER_URLS["avengers_t1"])
+    with a2:
+        st.caption("Teaser 2")
+        st.video(YOUTUBE_TRAILER_URLS["avengers_t2"])
+
+    st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
+
+    # Row 2: T3 + T4
+    a3, a4 = st.columns(2)
+    with a3:
+        st.caption("Teaser 3")
+        st.video(YOUTUBE_TRAILER_URLS["avengers_t3"])
+    with a4:
+        st.caption("Teaser 4")
+        st.video(YOUTUBE_TRAILER_URLS["avengers_t4"])
+
+    st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
+
+    # Countdown clock — full width
+    st.caption("Countdown Clock")
+    st.video(YOUTUBE_TRAILER_URLS["avengers_countdown"])
+
+    st.markdown(f"<hr style='border-color:{P['card_rule']}; margin:20px 0 14px;'>",
+                unsafe_allow_html=True)
+
+    # ── Dune: Part Three ──────────────────────────────────────────────────────
+    st.markdown(
+        f"<span style='color:{P['dune']}; font-size:0.82rem; font-weight:600; "
+        f"letter-spacing:2px;'>DUNE: PART THREE</span>",
+        unsafe_allow_html=True,
+    )
+    st.markdown(f"<hr style='border-color:{P['card_rule']}; margin:6px 0 14px;'>",
+                unsafe_allow_html=True)
+
+    d1, d2 = st.columns([1, 1])
+    with d1:
+        st.caption("Teaser 1")
+        st.video(YOUTUBE_TRAILER_URLS["dune_t1"])
+    with d2:
+        st.markdown(
+            f"""
+            <div style='padding:24px 0; color:{P['dim']}; font-size:0.82rem; line-height:1.8;'>
+            <b style='color:{P['dune']}'>Strategic silence.</b><br><br>
+            WB following the Part Two marketing cadence — first trailer
+            expected closer to the Dec 18 release window.<br><br>
+            Dune's low Google Trends score (13/100 vs Avengers 72/100)
+            reflects zero promotional material released, not audience demand.
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
 
 
 # ── FOOTER ────────────────────────────────────────────────────────────────────

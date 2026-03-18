@@ -239,10 +239,23 @@ def fetch_google_trends() -> dict:
 
 # Official video IDs — update when full trailers drop
 YOUTUBE_VIDEO_IDS = {
-    "avengers_t1": "cz9JFwwgm3k",   # Teaser 1 (Steve Rogers)
-    "avengers_t2": "placeholder",    # Teaser 2 (Thor) — update with real ID
-    "avengers_full": None,           # Full trailer — not released yet
-    "dune_t1": None,                 # Not released yet
+    "avengers_t1":       "399Ez7WHK5s",   # Teaser 1
+    "avengers_t2":       "kH1XlwHQv9o",   # Teaser 2
+    "avengers_t3":       "1clWprLC5Ak",   # Teaser 3
+    "avengers_t4":       "UiMg566PREA",   # Teaser 4
+    "avengers_full":     None,            # Full trailer — not released yet
+    "avengers_countdown": "f17J3AXVK5w",  # Countdown clock
+    "dune_t1":           "3_9vCamtuPY",   # Dune: Part Three Teaser
+}
+
+# YouTube URLs for embedded playback (trailer display)
+YOUTUBE_TRAILER_URLS = {
+    "dune_t1":            "https://www.youtube.com/watch?v=3_9vCamtuPY",
+    "avengers_t1":        "https://www.youtube.com/watch?v=399Ez7WHK5s",
+    "avengers_t2":        "https://www.youtube.com/watch?v=kH1XlwHQv9o",
+    "avengers_t3":        "https://www.youtube.com/watch?v=1clWprLC5Ak",
+    "avengers_t4":        "https://www.youtube.com/watch?v=UiMg566PREA",
+    "avengers_countdown": "https://www.youtube.com/watch?v=f17J3AXVK5w",
 }
 
 def fetch_youtube_views(video_ids: list = None) -> dict:
@@ -428,17 +441,24 @@ def fetch_and_calibrate(base_dune_score: int = 87, base_av_score: int = 88) -> d
     # ── 3. YouTube API ────────────────────────────────────────────────────────
     yt = fetch_youtube_views()
     if yt.get("status") == "ok" and yt.get("videos"):
-        # Sum avengers trailer views
+        av_ids = {
+            YOUTUBE_VIDEO_IDS.get(k)
+            for k in ("avengers_t1", "avengers_t2", "avengers_t3",
+                      "avengers_t4", "avengers_full")
+            if YOUTUBE_VIDEO_IDS.get(k)
+        }
+        dune_ids = {
+            YOUTUBE_VIDEO_IDS.get(k)
+            for k in ("dune_t1",)
+            if YOUTUBE_VIDEO_IDS.get(k)
+        }
         av_yt_total = sum(
             v["views"] for vid_id, v in yt["videos"].items()
-            if "avengers" in vid_id.lower() or vid_id in [
-                YOUTUBE_VIDEO_IDS.get("avengers_t1"),
-                YOUTUBE_VIDEO_IDS.get("avengers_full"),
-            ]
+            if vid_id in av_ids
         )
         dune_yt_total = sum(
             v["views"] for vid_id, v in yt["videos"].items()
-            if "dune" in vid_id.lower() or vid_id == YOUTUBE_VIDEO_IDS.get("dune_t1")
+            if vid_id in dune_ids
         )
         if av_yt_total > 0:
             av_adj   += calibrate_from_yt_views(av_yt_total, "AVENGERS")
