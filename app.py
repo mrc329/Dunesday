@@ -491,6 +491,7 @@ tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
 with tab1:
     st.markdown(f"<p style='font-size:0.58rem; letter-spacing:2px; color:{P['dim']}; margin-bottom:10px;'>NET PROFIT BY SCENARIO — P10 / P50 / P90</p>",
                 unsafe_allow_html=True)
+    st.caption("Bar = P50 median outcome. Whiskers show P10 (downside, 10th percentile) and P90 (upside, 90th percentile) from 5,000 Monte Carlo trials. Convention follows standard financial analysis: P10 is pessimistic, P90 is optimistic.")
 
     sk_list   = list(SCENARIOS.keys())
     sc_labels = [SCENARIOS[sk]["label"] for sk in sk_list]
@@ -511,8 +512,8 @@ with tab1:
         cliponaxis=False,
         error_y=dict(
             type="data", symmetric=False,
-            array=[p10 - p50 for p10, p50 in zip(dune_p10s, dune_p50s)],
-            arrayminus=[p50 - p90 for p50, p90 in zip(dune_p50s, dune_p90s)],
+            array=[p90 - p50 for p90, p50 in zip(dune_p90s, dune_p50s)],
+            arrayminus=[p50 - p10 for p50, p10 in zip(dune_p50s, dune_p10s)],
             color=P["dune"], thickness=1.5, width=5,
         ),
     ))
@@ -525,8 +526,8 @@ with tab1:
         cliponaxis=False,
         error_y=dict(
             type="data", symmetric=False,
-            array=[p10 - p50 for p10, p50 in zip(av_p10s, av_p50s)],
-            arrayminus=[p50 - p90 for p50, p90 in zip(av_p50s, av_p90s)],
+            array=[p90 - p50 for p90, p50 in zip(av_p90s, av_p50s)],
+            arrayminus=[p50 - p10 for p50, p10 in zip(av_p50s, av_p10s)],
             color=P["av"], thickness=1.5, width=5,
         ),
     ))
