@@ -11,7 +11,7 @@ import datetime
 
 from model.config import FILM_PARAMS, IMAX_CONFIG
 from model.core import run_all_scenarios, imax_gap_summary, SCENARIOS
-from model.signals import fetch_and_calibrate
+from model.signals import fetch_and_calibrate, YOUTUBE_TRAILER_URLS
 
 # ── PAGE CONFIG ────────────────────────────────────────────────────────────────
 st.set_page_config(
@@ -193,6 +193,31 @@ def build_css(P: dict) -> str:
   /* ── dataframe ── */
   [data-testid="stDataFrame"] {{ font-size: 0.78rem !important; }}
 
+  /* ── plotly — prevent bar labels from clipping at chart boundary ── */
+  .js-plotly-plot .plotly .main-svg {{
+    overflow: visible !important;
+  }}
+  .js-plotly-plot .plotly {{
+    overflow: visible !important;
+  }}
+
+  /* ── video embeds — full-width, consistent aspect ratio ── */
+  [data-testid="stVideo"] {{
+    width: 100% !important;
+  }}
+  [data-testid="stVideo"] iframe,
+  [data-testid="stVideo"] video {{
+    width: 100% !important;
+    aspect-ratio: 16/9 !important;
+    height: auto !important;
+    border: none !important;
+  }}
+
+  /* ── tab content — ensure no section collides with the tab bar ── */
+  .stTabs [data-baseweb="tab-panel"] {{
+    padding-top: 16px !important;
+  }}
+
   /* ── toggle / slider labels ── */
   [data-testid="stToggleLabel"] p,
   [data-testid="stSliderLabel"] p,
@@ -223,8 +248,12 @@ if not _qs_theme:
 
 
 # ── CHART LAYOUT HELPER ────────────────────────────────────────────────────────
-def _layout(P: dict, **kw) -> dict:
-    """Tufte-style Plotly base layout — transparent bg, no gridlines."""
+def _layout(P: dict, outside_text: bool = False, **kw) -> dict:
+    """Tufte-style Plotly base layout — transparent bg, no gridlines.
+
+    outside_text=True adds extra top margin so textposition='outside' bars
+    are never clipped by the chart frame.
+    """
     base = dict(
         plot_bgcolor="rgba(0,0,0,0)",
         paper_bgcolor=P["bg"],
@@ -237,7 +266,7 @@ def _layout(P: dict, **kw) -> dict:
             y=1.04,
             x=0,
         ),
-        margin=dict(t=20, b=10, l=4, r=8),
+        margin=dict(t=44 if outside_text else 20, b=30, l=48, r=16),
         xaxis=dict(
             showgrid=False,
             showline=True,
@@ -387,8 +416,8 @@ st.divider()
 
 
 # ── TABS ──────────────────────────────────────────────────────────────────────
-tab1, tab2, tab3, tab4, tab5 = st.tabs([
-    "SCENARIOS", "IMAX TIMELINE", "LIVE SIGNALS", "DISTRIBUTIONS", "DISNEY DECISION",
+tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+    "SCENARIOS", "IMAX TIMELINE", "LIVE SIGNALS", "DISTRIBUTIONS", "DISNEY DECISION", "TRAILERS",
 ])
 
 
@@ -413,6 +442,7 @@ with tab1:
         text=[f"${v:.0f}M" for v in dune_p50s],
         textposition="outside",
         textfont=dict(size=10, color=P["dune"]),
+        cliponaxis=False,
         error_y=dict(
             type="data", symmetric=False,
             array=[p90 - p50 for p90, p50 in zip(dune_p90s, dune_p50s)],
@@ -426,6 +456,7 @@ with tab1:
         text=[f"${v:.0f}M" for v in av_p50s],
         textposition="outside",
         textfont=dict(size=10, color=P["av"]),
+        cliponaxis=False,
         error_y=dict(
             type="data", symmetric=False,
             array=[p90 - p50 for p90, p50 in zip(av_p90s, av_p50s)],
@@ -434,7 +465,9 @@ with tab1:
         ),
     ))
     fig.add_hline(y=0, line_width=0.5, line_color=P["axis"])
-    fig.update_layout(**_layout(P, barmode="group", height=390, yaxis_title="Net Profit ($M)"))
+    fig.update_layout(**_layout(P, outside_text=True,
+                                barmode="group", height=420,
+                                yaxis_title="Net Profit ($M)"))
     st.plotly_chart(fig, use_container_width=True)
 
     rows = []
@@ -512,8 +545,8 @@ with tab2:
                 xanchor="center",
             )
 
-    fig2.update_layout(**_layout(P, height=480, barmode="stack",
-                                 margin=dict(t=32, b=10, l=4, r=8)))
+    fig2.update_layout(**_layout(P, height=520, barmode="stack",
+                                 margin=dict(t=44, b=40, l=52, r=16)))
     fig2.update_xaxes(tickangle=45, nticks=15, showgrid=False,
                       showline=True, linecolor=P["axis"], linewidth=0.5)
     fig2.update_yaxes(showgrid=False, showline=False, zeroline=False)
@@ -592,9 +625,9 @@ with tab3:
                 annotation_font_color=P["mid_ref"], annotation_font_size=9,
             )
             fig_d.update_layout(**_layout(
-                P,
+                P, outside_text=True,
                 title=dict(text="Teaser Decay — X/Twitter Views", font=dict(size=11), x=0),
-                height=260, yaxis_title="Views (M)",
+                height=300, yaxis_title="Views (M)",
             ))
             st.plotly_chart(fig_d, use_container_width=True)
 
@@ -666,7 +699,7 @@ with tab3:
             annotation_text="Expected Dune baseline (no trailer)",
             annotation_font_color=P["dune"], annotation_font_size=9,
         )
-        fig_ratio.update_layout(**_layout(P, barmode="stack", height=180, yaxis_title="%"))
+        fig_ratio.update_layout(**_layout(P, barmode="stack", height=260, yaxis_title="%"))
         st.plotly_chart(fig_ratio, use_container_width=True)
 
         st.caption("Dune's 13/100 vs Avengers 72/100 is marketing stage, not demand. "
@@ -740,7 +773,7 @@ with tab4:
         annotation_font_color=P["mid_ref"], annotation_font_size=9,
     )
     fig4.update_layout(**_layout(
-        P, barmode="overlay", height=380,
+        P, barmode="overlay", height=400,
         xaxis_title="Net Profit ($M)", yaxis_title="Probability Density",
     ))
     st.plotly_chart(fig4, use_container_width=True)
@@ -800,7 +833,8 @@ with tab5:
         textfont=dict(size=11, color=P["chart_font"]),
     ))
     fig5.add_hline(y=0, line_width=0.5, line_color=P["axis"])
-    fig5.update_layout(**_layout(P, height=280, yaxis_title="%", yaxis_range=[0, 50]))
+    fig5.update_layout(**_layout(P, outside_text=True,
+                                 height=320, yaxis_title="%", yaxis_range=[0, 55]))
     st.plotly_chart(fig5, use_container_width=True)
     st.dataframe(pd.DataFrame(prob_data), use_container_width=True, hide_index=True)
 
@@ -820,6 +854,80 @@ with tab5:
     </span>
     </div>
     """, unsafe_allow_html=True)
+
+
+# ── TAB 6: TRAILERS ───────────────────────────────────────────────────────────
+with tab6:
+    st.markdown(
+        f"<p style='font-size:0.58rem; letter-spacing:2px; color:{P['dim']}; margin-bottom:16px;'>"
+        "OFFICIAL TRAILERS — EMBEDDED FROM YOUTUBE</p>",
+        unsafe_allow_html=True,
+    )
+
+    # ── Avengers: Doomsday ────────────────────────────────────────────────────
+    st.markdown(
+        f"<span style='color:{P['av']}; font-size:0.82rem; font-weight:600; "
+        f"letter-spacing:2px;'>AVENGERS: DOOMSDAY</span>",
+        unsafe_allow_html=True,
+    )
+    st.markdown(f"<hr style='border-color:{P['card_rule']}; margin:6px 0 14px;'>",
+                unsafe_allow_html=True)
+
+    # Row 1: T1 + T2
+    a1, a2 = st.columns(2)
+    with a1:
+        st.caption("Teaser 1")
+        st.video(YOUTUBE_TRAILER_URLS["avengers_t1"])
+    with a2:
+        st.caption("Teaser 2")
+        st.video(YOUTUBE_TRAILER_URLS["avengers_t2"])
+
+    st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
+
+    # Row 2: T3 + T4
+    a3, a4 = st.columns(2)
+    with a3:
+        st.caption("Teaser 3")
+        st.video(YOUTUBE_TRAILER_URLS["avengers_t3"])
+    with a4:
+        st.caption("Teaser 4")
+        st.video(YOUTUBE_TRAILER_URLS["avengers_t4"])
+
+    st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
+
+    # Countdown clock — full width
+    st.caption("Countdown Clock")
+    st.video(YOUTUBE_TRAILER_URLS["avengers_countdown"])
+
+    st.markdown(f"<hr style='border-color:{P['card_rule']}; margin:20px 0 14px;'>",
+                unsafe_allow_html=True)
+
+    # ── Dune: Part Three ──────────────────────────────────────────────────────
+    st.markdown(
+        f"<span style='color:{P['dune']}; font-size:0.82rem; font-weight:600; "
+        f"letter-spacing:2px;'>DUNE: PART THREE</span>",
+        unsafe_allow_html=True,
+    )
+    st.markdown(f"<hr style='border-color:{P['card_rule']}; margin:6px 0 14px;'>",
+                unsafe_allow_html=True)
+
+    d1, d2 = st.columns([1, 1])
+    with d1:
+        st.caption("Teaser 1")
+        st.video(YOUTUBE_TRAILER_URLS["dune_t1"])
+    with d2:
+        st.markdown(
+            f"""
+            <div style='padding:24px 0; color:{P['dim']}; font-size:0.82rem; line-height:1.8;'>
+            <b style='color:{P['dune']}'>Strategic silence.</b><br><br>
+            WB following the Part Two marketing cadence — first trailer
+            expected closer to the Dec 18 release window.<br><br>
+            Dune's low Google Trends score (13/100 vs Avengers 72/100)
+            reflects zero promotional material released, not audience demand.
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
 
 
 # ── FOOTER ────────────────────────────────────────────────────────────────────
