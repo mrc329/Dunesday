@@ -274,7 +274,7 @@ YOUTUBE_VIDEO_IDS = {
     "avengers_full":     None,            # Full trailer — not released yet
     "avengers_countdown": "f17J3AXVK5w",  # Countdown clock
     "dune_t1":           "3_9vCamtuPY",   # Dune: Part Three Teaser
-    "spiderman_full":    "LFWF-N9mm60",   # Spider-Man: BND trailer (2026-03-18)
+    "spiderman_full":    "8TZMtslA3UY",   # Spider-Man: BND trailer (2026-03-18)
 }
 
 # YouTube URLs for embedded playback (trailer display)
@@ -285,7 +285,7 @@ YOUTUBE_TRAILER_URLS = {
     "avengers_t3":        "https://www.youtube.com/watch?v=1clWprLC5Ak",
     "avengers_t4":        "https://www.youtube.com/watch?v=UiMg566PREA",
     "avengers_countdown": "https://www.youtube.com/watch?v=f17J3AXVK5w",
-    "spiderman_full":     "https://www.youtube.com/watch?v=LFWF-N9mm60",
+    "spiderman_full":     "https://www.youtube.com/watch?v=8TZMtslA3UY",
 }
 
 def fetch_youtube_views(video_ids: list = None) -> dict:
