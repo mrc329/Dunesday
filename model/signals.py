@@ -556,6 +556,204 @@ def calibrate_from_trakt(collectors: int, film: str) -> float:
         else:                      return -3.0
 
 
+# ── POLYMARKET ────────────────────────────────────────────────────────────────
+# No API key needed — public prediction market data.
+# Two markets are tracked:
+#   "full_year"  — "Highest grossing movie in 2026?" (calendar year domestic)
+#   "ow"         — "Which movie has the biggest opening weekend in 2026?"
+#
+# Each event contains one Yes/No market per film.
+# The Yes price (0–1) is the crowd's implied probability.
+#
+# KEY INSIGHT: The gap between OW odds and full-year odds directly prices
+# the IMAX / legs damage from the Dec 18 conflict. Currently:
+#   Avengers OW: ~75%  Full-year: ~21%  → market expects a legs collapse
+# If Disney moved, the full-year odds would converge toward the OW odds.
+
+POLYMARKET_MARKET_SLUGS = {
+    # Individual Yes/No market slugs from polymarket.com event URLs
+    "avengers_ow":        "will-avengers-doomsday-have-the-best-domestic-opening-weekend-in-2026",
+    "avengers_full_year": "will-avengers-doomsday-be-the-top-grossing-movie-of-2026",
+    "dune_full_year":     "will-dune-part-three-be-the-top-grossing-movie-of-2026",
+}
+
+POLYMARKET_EVENT_SLUGS = {
+    "full_year": "highest-grossing-movie-in-2026",
+    "ow":        "which-movie-has-biggest-opening-weekend-in-2026",
+}
+
+# Hardcoded fallback odds (update manually when odds shift significantly)
+POLYMARKET_FALLBACK = {
+    "avengers_ow_odds":        0.75,   # 75% — best OW in 2026
+    "avengers_full_year_odds": 0.21,   # 21% — highest full-year gross in 2026
+    "dune_full_year_odds":     None,   # not in top markets yet
+    "last_updated":            "2026-03-18",
+}
+
+
+def fetch_polymarket_signals() -> dict:
+    """
+    Fetch live prediction market odds from Polymarket's public Gamma API.
+    No API key required.
+
+    Tries the event-level endpoint first (one call, all films), then falls
+    back to individual market slugs. Falls back to POLYMARKET_FALLBACK on
+    any network failure.
+
+    Returns dict with:
+      avengers_ow_odds        — P(Avengers has best OW in 2026)
+      avengers_full_year_odds — P(Avengers is top grossing film in 2026)
+      dune_full_year_odds     — P(Dune Part Three is top grossing film in 2026)
+      ow_decay_ratio          — avengers_ow_odds / avengers_full_year_odds
+                                (> 2.0 signals market expects a legs problem)
+    """
+    try:
+        import requests
+        headers = {
+            "User-Agent": "dunesday/1.0 (box office research; contact via github)",
+            "Accept":     "application/json",
+        }
+
+        result = {}
+
+        # ── Strategy 1: event-level fetch (gets all films in one call) ────────
+        for market_type, event_slug in POLYMARKET_EVENT_SLUGS.items():
+            url = f"https://gamma-api.polymarket.com/events?slug={event_slug}"
+            resp = requests.get(url, headers=headers, timeout=10)
+            if resp.status_code != 200:
+                continue
+            events = resp.json()
+            if not events:
+                continue
+            event = events[0] if isinstance(events, list) else events
+            for mkt in event.get("markets", []):
+                question   = (mkt.get("question") or mkt.get("groupItemTitle") or "").lower()
+                prices_raw = mkt.get("outcomePrices") or mkt.get("bestBid") or []
+                # outcomePrices is ["yes_price", "no_price"] as strings
+                if not prices_raw:
+                    continue
+                try:
+                    yes_price = float(prices_raw[0]) if isinstance(prices_raw, list) else None
+                except (ValueError, TypeError):
+                    yes_price = None
+                if yes_price is None:
+                    continue
+
+                if "avengers" in question or "doomsday" in question:
+                    if market_type == "ow":
+                        result["avengers_ow_odds"] = yes_price
+                    else:
+                        result["avengers_full_year_odds"] = yes_price
+                elif "dune" in question:
+                    if market_type == "full_year":
+                        result["dune_full_year_odds"] = yes_price
+
+        # ── Strategy 2: individual market slugs for anything still missing ────
+        needed = {
+            "avengers_ow_odds":        POLYMARKET_MARKET_SLUGS["avengers_ow"],
+            "avengers_full_year_odds": POLYMARKET_MARKET_SLUGS["avengers_full_year"],
+            "dune_full_year_odds":     POLYMARKET_MARKET_SLUGS["dune_full_year"],
+        }
+        for key, slug in needed.items():
+            if key in result:
+                continue
+            url  = f"https://gamma-api.polymarket.com/markets?slug={slug}"
+            resp = requests.get(url, headers=headers, timeout=10)
+            if resp.status_code != 200:
+                continue
+            mkts = resp.json()
+            mkt  = mkts[0] if isinstance(mkts, list) and mkts else mkts
+            prices_raw = mkt.get("outcomePrices") or []
+            try:
+                result[key] = float(prices_raw[0])
+            except (IndexError, ValueError, TypeError):
+                pass
+
+        if not result:
+            fb = dict(POLYMARKET_FALLBACK)
+            av_ow = fb.get("avengers_ow_odds")
+            av_fy = fb.get("avengers_full_year_odds")
+            if av_ow and av_fy and av_fy > 0:
+                fb["ow_decay_ratio"] = round(av_ow / av_fy, 2)
+            return {"status": "error", "message": "no data returned from Gamma API",
+                    **fb, "source": "fallback"}
+
+        # Compute the legs-damage ratio
+        av_ow  = result.get("avengers_ow_odds")
+        av_fy  = result.get("avengers_full_year_odds")
+        if av_ow and av_fy and av_fy > 0:
+            result["ow_decay_ratio"] = round(av_ow / av_fy, 2)
+
+        result["status"]     = "ok"
+        result["source"]     = "live"
+        result["fetched_at"] = datetime.datetime.utcnow().isoformat()
+        return result
+
+    except Exception as e:
+        fb = dict(POLYMARKET_FALLBACK)
+        av_ow = fb.get("avengers_ow_odds")
+        av_fy = fb.get("avengers_full_year_odds")
+        if av_ow and av_fy and av_fy > 0:
+            fb["ow_decay_ratio"] = round(av_ow / av_fy, 2)
+        return {"status": "error", "message": str(e), **fb, "source": "fallback"}
+
+
+def calibrate_from_polymarket(av_ow_odds: float, av_fy_odds: float) -> dict:
+    """
+    Derive audience score adjustments and a move-signal from Polymarket odds.
+
+    OW odds  → small Avengers audience score adjustment (crowd's OW conviction)
+    FY odds  → surfaces the legs problem; NOT fed into audience score directly
+               (IMAX damage is already modeled separately in core.py)
+    Ratio    → ow_decay_ratio > 2.5 is a strong "market expects legs collapse" signal
+
+    Returns:
+      av_score_adj  — float, added to Avengers audience score
+      move_signal   — "hold" | "neutral" | "move" | None
+      notes         — human-readable interpretation
+    """
+    av_score_adj = 0.0
+    move_signal  = None
+    notes        = []
+
+    if av_ow_odds is not None:
+        if av_ow_odds >= 0.65:
+            av_score_adj = +1.5
+            notes.append(f"Polymarket OW: {av_ow_odds:.0%} — market confirms Avengers as dominant opener.")
+        elif av_ow_odds >= 0.45:
+            av_score_adj = 0.0
+            notes.append(f"Polymarket OW: {av_ow_odds:.0%} — neutral OW signal.")
+        else:
+            av_score_adj = -2.0
+            notes.append(f"Polymarket OW: {av_ow_odds:.0%} — soft OW signal, MCU fatigue priced in.")
+
+    if av_ow_odds and av_fy_odds and av_fy_odds > 0:
+        ratio = av_ow_odds / av_fy_odds
+        if ratio >= 3.0:
+            move_signal = "move"
+            notes.append(
+                f"OW/FY ratio {ratio:.1f}x — market prices a major legs collapse. "
+                "Consistent with Dec 18 IMAX penalty. Move signal: STRONG."
+            )
+        elif ratio >= 2.0:
+            move_signal = "neutral"
+            notes.append(
+                f"OW/FY ratio {ratio:.1f}x — market expects underperformance relative to opening. "
+                "Moderate legs concern."
+            )
+        else:
+            move_signal = "hold"
+            notes.append(
+                f"OW/FY ratio {ratio:.1f}x — market expects legs to hold. Hold signal."
+            )
+
+    return {
+        "av_score_adj": av_score_adj,
+        "move_signal":  move_signal,
+        "notes":        " ".join(notes),
+    }
+
+
 # ── MASTER FETCH + CALIBRATE ──────────────────────────────────────────────────
 
 def fetch_and_calibrate(base_dune_score: int = 87, base_av_score: int = 88) -> dict:
@@ -701,7 +899,27 @@ def fetch_and_calibrate(base_dune_score: int = 87, base_av_score: int = 88) -> d
         signals["_trakt_status"]  = trakt.get("status", "unavailable")
         signals["_trakt_message"] = trakt.get("message", "")
 
-    # ── 6. Spider-Man: BND trailer calibration ───────────────────────────────
+    # ── 6. Polymarket prediction market odds ──────────────────────────────────
+    poly = fetch_polymarket_signals()
+    poly_calib = calibrate_from_polymarket(
+        poly.get("avengers_ow_odds"),
+        poly.get("avengers_full_year_odds"),
+    )
+    av_adj += poly_calib["av_score_adj"]
+    sources_used.append("Polymarket" if poly.get("source") == "live" else "Polymarket (fallback)")
+
+    signals["polymarket"] = {
+        "avengers_ow_odds":        poly.get("avengers_ow_odds"),
+        "avengers_full_year_odds": poly.get("avengers_full_year_odds"),
+        "dune_full_year_odds":     poly.get("dune_full_year_odds"),
+        "ow_decay_ratio":          poly.get("ow_decay_ratio"),
+        "move_signal":             poly_calib["move_signal"],
+        "notes":                   poly_calib["notes"],
+        "source":                  poly.get("source", "fallback"),
+        "fetched_at":              poly.get("fetched_at"),
+    }
+
+    # ── 7. Spider-Man: BND trailer calibration ───────────────────────────────
     spidey_yt_id = YOUTUBE_VIDEO_IDS.get("spiderman_full")
     spidey_suggested_tier  = None
     spidey_trailer_fresh   = _is_fresh_trailer(signals.get("spiderman", {}).get("trailer_date"))
@@ -723,7 +941,7 @@ def fetch_and_calibrate(base_dune_score: int = 87, base_av_score: int = 88) -> d
         signals["spiderman"]["suggested_tier"] = spidey_suggested_tier
         sources_used.append("Spider-Man trailer (YouTube)")
 
-    # ── 7. Final calibrated scores ────────────────────────────────────────────
+    # ── 8. Final calibrated scores ────────────────────────────────────────────
     av_calibrated   = float(np.clip(base_av_score   + av_adj,   60, 100))
     dune_calibrated = float(np.clip(base_dune_score + dune_adj, 60, 100))
 
@@ -733,7 +951,7 @@ def fetch_and_calibrate(base_dune_score: int = 87, base_av_score: int = 88) -> d
     #   low    — no live sources
     sources_set = set(sources_used)
     has_core      = {"YouTube API", "Wikipedia"}.issubset(sources_set)
-    has_secondary = bool(sources_set & {"TMDB", "Trakt"})
+    has_secondary = bool(sources_set & {"TMDB", "Trakt", "Polymarket"})
     no_fallback   = not any("fallback" in s for s in sources_used)
 
     if has_core and has_secondary and no_fallback:
