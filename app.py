@@ -511,8 +511,8 @@ with tab1:
         cliponaxis=False,
         error_y=dict(
             type="data", symmetric=False,
-            array=[p90 - p50 for p90, p50 in zip(dune_p90s, dune_p50s)],
-            arrayminus=[p50 - p10 for p50, p10 in zip(dune_p50s, dune_p10s)],
+            array=[p10 - p50 for p10, p50 in zip(dune_p10s, dune_p50s)],
+            arrayminus=[p50 - p90 for p50, p90 in zip(dune_p50s, dune_p90s)],
             color=P["dune"], thickness=1.5, width=5,
         ),
     ))
@@ -525,8 +525,8 @@ with tab1:
         cliponaxis=False,
         error_y=dict(
             type="data", symmetric=False,
-            array=[p90 - p50 for p90, p50 in zip(av_p90s, av_p50s)],
-            arrayminus=[p50 - p10 for p50, p10 in zip(av_p50s, av_p10s)],
+            array=[p10 - p50 for p10, p50 in zip(av_p10s, av_p50s)],
+            arrayminus=[p50 - p90 for p50, p90 in zip(av_p50s, av_p90s)],
             color=P["av"], thickness=1.5, width=5,
         ),
     ))

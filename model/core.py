@@ -200,9 +200,9 @@ def run_monte_carlo(
     arr = np.array(revenues)
     return {
         "profits":       arr,
-        "p10":           float(np.percentile(arr, 10)),
+        "p10":           float(np.percentile(arr, 90)),  # 10% chance of making at least this (optimistic)
         "p50":           float(np.percentile(arr, 50)),
-        "p90":           float(np.percentile(arr, 90)),
+        "p90":           float(np.percentile(arr, 10)),  # 90% chance of making at least this (conservative)
         "mean":          float(arr.mean()),
         "breakeven_pct": float((arr > 0).mean() * 100),
         "imax_rev_mean": float(np.mean(imax_revs)),
