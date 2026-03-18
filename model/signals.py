@@ -42,11 +42,18 @@ FALLBACK_SIGNALS = {
         "reddit_hot_avg":    None,  # avg score of top-25 hot posts in r/dune
         "reddit_posts_24h":  None,
     },
+    "spiderman": {
+        "full_trailer_released": True,
+        "trailer_date":          "2026-03-18",
+        "yt_trailer_views_M":    None,   # populated from YouTube API when ID is configured
+        "suggested_tier":        None,   # auto-calibrated from view count
+    },
     "calibration": {
-        "avengers_score_adj": 0.0,   # adjustment to base audience score
-        "dune_score_adj":     0.0,
-        "signal_confidence":  "low",  # low / medium / high
-        "notes":              "No full trailer yet. Calibration based on teaser decay only.",
+        "avengers_score_adj":  0.0,   # adjustment to base audience score
+        "dune_score_adj":      0.0,
+        "signal_confidence":   "low",  # low / medium / high
+        "spidey_suggested_tier": None, # auto-suggested from Spider-Man trailer views
+        "notes":               "Spider-Man: Brand New Day trailer released 2026-03-18. Calibration pending view count data.",
     }
 }
 
@@ -155,6 +162,27 @@ def calibrate_from_yt_views(views: int, film: str) -> float:
         else:                return -2.0
 
 
+def calibrate_from_spidey_trailer(views_M: float) -> str:
+    """
+    Map Spider-Man: Brand New Day trailer view count to an impact tier.
+    Used to auto-suggest the SPIDEY_IMPACT_ADJ tier in the sidebar.
+
+    Benchmarks (24hr YouTube views at comparable release stage):
+      NWH T1:         355M  → broke records, MCU at peak
+      FFH T1:         135M  → strong, healthy MCU
+      Homecoming T1:  ~64M  → acceptable for reboot
+    Returns: tier string matching SPIDEY_IMPACT_ADJ keys
+    """
+    if views_M is None:
+        return None
+
+    if views_M >= 350:    return "Blockbuster"   # NWH territory — MCU hype peak
+    elif views_M >= 200:  return "Strong"         # healthy MCU demand signal
+    elif views_M >= 110:  return "Neutral"        # matches FFH baseline
+    elif views_M >= 60:   return "Soft"           # below Homecoming level
+    else:                 return "Disappoints"    # MCU fatigue confirmed
+
+
 def calibrate_from_reddit(hot_score_avg: float, posts_24h: int, film: str) -> float:
     """
     Convert Reddit engagement metrics into audience score adjustment.
@@ -246,6 +274,7 @@ YOUTUBE_VIDEO_IDS = {
     "avengers_full":     None,            # Full trailer — not released yet
     "avengers_countdown": "f17J3AXVK5w",  # Countdown clock
     "dune_t1":           "3_9vCamtuPY",   # Dune: Part Three Teaser
+    "spiderman_full":    "8TZMtslA3UY",   # Spider-Man: BND trailer (2026-03-18)
 }
 
 # YouTube URLs for embedded playback (trailer display)
@@ -256,6 +285,7 @@ YOUTUBE_TRAILER_URLS = {
     "avengers_t3":        "https://www.youtube.com/watch?v=1clWprLC5Ak",
     "avengers_t4":        "https://www.youtube.com/watch?v=UiMg566PREA",
     "avengers_countdown": "https://www.youtube.com/watch?v=f17J3AXVK5w",
+    "spiderman_full":     "https://www.youtube.com/watch?v=8TZMtslA3UY",
 }
 
 def fetch_youtube_views(video_ids: list = None) -> dict:
@@ -502,7 +532,17 @@ def fetch_and_calibrate(base_dune_score: int = 87, base_av_score: int = 88) -> d
         signals["_reddit_status"]  = reddit.get("status", "unavailable")
         signals["_reddit_message"] = reddit.get("message", "")
 
-    # ── 5. Final calibrated scores ────────────────────────────────────────────
+    # ── 5. Spider-Man: BND trailer calibration ────────────────────────────────
+    spidey_yt_id = YOUTUBE_VIDEO_IDS.get("spiderman_full")
+    spidey_suggested_tier = None
+    if yt.get("status") == "ok" and spidey_yt_id and spidey_yt_id in yt.get("videos", {}):
+        spidey_views_M = yt["videos"][spidey_yt_id]["views"] / 1_000_000
+        spidey_suggested_tier = calibrate_from_spidey_trailer(spidey_views_M)
+        signals["spiderman"]["yt_trailer_views_M"] = round(spidey_views_M, 1)
+        signals["spiderman"]["suggested_tier"]     = spidey_suggested_tier
+        sources_used.append("Spider-Man trailer (YouTube)")
+
+    # ── 6. Final calibrated scores ────────────────────────────────────────────
     av_calibrated   = float(np.clip(base_av_score   + av_adj,   60, 100))
     dune_calibrated = float(np.clip(base_dune_score + dune_adj, 60, 100))
 
@@ -517,22 +557,23 @@ def fetch_and_calibrate(base_dune_score: int = 87, base_av_score: int = 88) -> d
         confidence = "low"
 
     signals["calibration"] = {
-        "avengers_base":      base_av_score,
-        "dune_base":          base_dune_score,
-        "avengers_adj":       round(av_adj, 1),
-        "dune_adj":           round(dune_adj, 1),
-        "avengers_calibrated": av_calibrated,
-        "dune_calibrated":     dune_calibrated,
-        "sources":             sources_used,
-        "signal_confidence":   confidence,
-        "teaser_decay_signal": "soft" if av_decay_adj < -1 else "neutral" if av_decay_adj == 0 else "strong",
-        "notes": _build_notes(av_adj, dune_adj, trends, yt, reddit),
+        "avengers_base":        base_av_score,
+        "dune_base":            base_dune_score,
+        "avengers_adj":         round(av_adj, 1),
+        "dune_adj":             round(dune_adj, 1),
+        "avengers_calibrated":  av_calibrated,
+        "dune_calibrated":      dune_calibrated,
+        "sources":              sources_used,
+        "signal_confidence":    confidence,
+        "teaser_decay_signal":  "soft" if av_decay_adj < -1 else "neutral" if av_decay_adj == 0 else "strong",
+        "spidey_suggested_tier": spidey_suggested_tier,
+        "notes": _build_notes(av_adj, dune_adj, trends, yt, reddit, spidey_suggested_tier),
     }
 
     return signals
 
 
-def _build_notes(av_adj, dune_adj, trends, yt, reddit=None) -> str:
+def _build_notes(av_adj, dune_adj, trends, yt, reddit=None, spidey_tier=None) -> str:
     notes = []
     if av_adj < -2:
         notes.append(f"Avengers downgraded {av_adj:+.0f}pts — teaser decay matches Love&Thunder pattern.")
@@ -540,6 +581,11 @@ def _build_notes(av_adj, dune_adj, trends, yt, reddit=None) -> str:
         notes.append(f"Avengers upgraded {av_adj:+.0f}pts — strong engagement signal.")
     else:
         notes.append("Avengers signal neutral — insufficient data for strong calibration.")
+
+    if spidey_tier:
+        notes.append(f"Spider-Man: BND trailer auto-suggests '{spidey_tier}' tier for MCU brand signal.")
+    else:
+        notes.append("Spider-Man: BND trailer released 2026-03-18 — set YOUTUBE_VIDEO_IDS['spiderman_full'] to enable auto-calibration.")
 
     if yt and yt.get("status") != "ok":
         notes.append("Add YOUTUBE_API_KEY to Streamlit secrets for live trailer view data.")
