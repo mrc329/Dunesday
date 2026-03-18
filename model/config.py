@@ -138,7 +138,7 @@ DOW_MULTIPLIERS = {
 
 # ── HYPE SIGNALS (update manually until scraper is built) ────────────────────
 HYPE_SIGNALS = {
-    "last_updated": "2026-02-26",
+    "last_updated": "2026-03-18",
     "avengers": {
         "teaser_views": [
             {"label": "T1 Steve Rogers", "platform": "X", "views_M": 53.0, "estimated": False},
@@ -158,6 +158,15 @@ HYPE_SIGNALS = {
         "full_trailer_released": False,
         "alamo_poll_rank": 1,
         "alamo_poll_respondents": 14000,
+    },
+    "spiderman": {
+        # Spider-Man: Brand New Day — first trailer released 2026-03-18
+        # across Sony Pictures official channels (YouTube, X, Instagram, TikTok)
+        "full_trailer_released": True,
+        "trailer_date": "2026-03-18",
+        "yt_trailer_views_M": None,   # populated from YouTube API when ID is set
+        "combined_views_M": None,     # update manually after 48hr count
+        "suggested_tier": None,       # auto-calibrated from trailer views
     },
     "cinemacon_date": "2026-04-13",
     "disney_presentation_date": "2026-04-16",

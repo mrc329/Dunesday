@@ -314,6 +314,7 @@ _YT_SLOT_LABELS = {
     "avengers_t4":        "Avengers T4",
     "avengers_countdown": "Avengers Countdown",
     "dune_t1":            "Dune T1",
+    "spiderman_full":     "Spider-Man BND T1",
 }
 
 # Ordered teaser slots for decay chart
@@ -394,6 +395,9 @@ with st.sidebar:
         f"**{spidey_adj:+d} pts** · OW mult "
         f"{'↑' if spidey_adj > 0 else '↓' if spidey_adj < 0 else '—'}"
     )
+    _auto_tier = cal.get("spidey_suggested_tier")
+    if _auto_tier and _auto_tier != spidey_tier:
+        st.caption(f"Trailer signal suggests: **{_auto_tier}** ↑ update slider")
 
     st.divider()
     override = st.toggle("Manual score override", value=False)
@@ -858,7 +862,7 @@ with tab3:
                     unsafe_allow_html=True)
 
         yt_rows = []
-        for slot in list(_AV_TEASER_SLOTS) + ["avengers_countdown", "dune_t1"]:
+        for slot in list(_AV_TEASER_SLOTS) + ["avengers_countdown", "dune_t1", "spiderman_full"]:
             vid_id = YOUTUBE_VIDEO_IDS.get(slot)
             if not vid_id:
                 continue
@@ -959,6 +963,54 @@ with tab3:
         + (f" (incl. Spider-Man {spidey_adj:+d}pt)" if spidey_adj != 0 else "")
     )
 
+    # ── Spider-Man: Brand New Day trailer signal ──────────────────────────────
+    st.divider()
+    st.markdown(
+        f"<p style='font-size:0.58rem; letter-spacing:2px; color:{P['dim']};'>"
+        "SPIDER-MAN: BRAND NEW DAY — MCU BRAND SIGNAL</p>",
+        unsafe_allow_html=True,
+    )
+    _spidey_sig_tab  = signals.get("spiderman", {})
+    _spidey_views_M_tab = _spidey_sig_tab.get("yt_trailer_views_M")
+    _spidey_tier_tab    = cal.get("spidey_suggested_tier") or _spidey_sig_tab.get("suggested_tier")
+    _spidey_color = P["av"] if _spidey_tier_tab in ("Disappoints", "Soft") else \
+                    P["dune"] if _spidey_tier_tab in ("Strong", "Blockbuster") else P["mid_ref"]
+
+    _sc1, _sc2, _sc3 = st.columns(3)
+    _sc1.metric(
+        "Trailer status",
+        "Released" if _spidey_sig_tab.get("full_trailer_released") else "Not released",
+        delta=_spidey_sig_tab.get("trailer_date", ""),
+    )
+    _sc2.metric(
+        "YouTube views",
+        f"{_spidey_views_M_tab:.0f}M" if _spidey_views_M_tab else "Pending",
+        delta="Set spiderman_full video ID" if not _spidey_views_M_tab else "Live",
+    )
+    _sc3.metric(
+        "Suggested impact tier",
+        _spidey_tier_tab or "—",
+        delta="MCU brand signal → Avengers score",
+    )
+    if _spidey_tier_tab:
+        st.markdown(f"""
+        <div style='border-left:2px solid {_spidey_color}; padding:7px 12px; margin-top:6px;'>
+          <span style='color:{_spidey_color}; font-size:0.6rem; letter-spacing:2px'>
+            AUTO-CALIBRATION: {_spidey_tier_tab.upper()}
+          </span><br>
+          <span style='color:{P["dim"]}; font-size:0.76rem'>
+            Trailer view count suggests <b style='color:{_spidey_color}'>{_spidey_tier_tab}</b>
+            impact tier — adjust the sidebar slider to override.
+          </span>
+        </div>
+        """, unsafe_allow_html=True)
+    else:
+        st.info(
+            "Spider-Man: Brand New Day trailer released 2026-03-18 across Sony Pictures channels. "
+            "Set `YOUTUBE_VIDEO_IDS['spiderman_full']` to the video ID to enable auto-calibration.",
+            icon="🕷",
+        )
+
     st.divider()
     st.markdown(f"<p style='font-size:0.58rem; letter-spacing:2px; color:{P['dim']};'>HOW SIGNALS FEED THE MODEL</p>",
                 unsafe_allow_html=True)
@@ -991,6 +1043,19 @@ with tab3:
                    "±3 pts max (score avg + post volume)",
                    "✓ Live" if _reddit_live else "⚠ Not configured"]
 
+    # Spider-Man trailer signal row
+    _spidey_sig     = signals.get("spiderman", {})
+    _spidey_views_M = _spidey_sig.get("yt_trailer_views_M")
+    _spidey_tier    = cal.get("spidey_suggested_tier") or _spidey_sig.get("suggested_tier")
+    _spidey_row = [
+        "Spider-Man: BND Trailer",
+        "MCU brand health signal",
+        f"{_spidey_views_M:.0f}M YT views" if _spidey_views_M else "Released 2026-03-18 — set video ID",
+        f"Suggests '{_spidey_tier}' tier → Av score adj"
+        if _spidey_tier else "Pending view count data",
+        "✓ Live" if _spidey_views_M else "⚠ Video ID needed",
+    ]
+
     rows_sig = [
         _trends_row,
         ["Teaser decay", "T1→T2 view retention",
@@ -1001,6 +1066,7 @@ with tab3:
         ["YouTube API", "Official trailer views", yt_row_val,
          "Feeds teaser decay + audience score calibration", yt_row_status],
         _reddit_row,
+        _spidey_row,
         ["Fandango presales", "Purchase intent", "Not open yet",
          "Opens Sept 2026", "⏳ Pending"],
     ]
