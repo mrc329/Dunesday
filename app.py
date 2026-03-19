@@ -1622,8 +1622,8 @@ with tab7:
     )
 
     # ── AT-A-GLANCE SUMMARY BLOCK ──────────────────────────────────────────────
-    _fp_d = FILM_PARAMS["DUNE"]
-    _fp_a = FILM_PARAMS["AVENGERS"]
+    fp_dune = FILM_PARAMS["DUNE"]
+    fp_av   = FILM_PARAMS["AVENGERS"]
     st.markdown(
         f"""
         <div style='
@@ -1664,26 +1664,26 @@ with tab7:
 
             <div>
               <div style='font-size:0.62rem; color:{P["dim"]}; letter-spacing:1px; margin-bottom:2px;'>DUNE OW MEAN</div>
-              <div style='font-size:1.25rem; font-weight:600; color:{P["dune"]};'>${_fp_d["ow_gross_mean_M"]:.0f}M</div>
-              <div style='font-size:0.7rem; color:{P["dim"]};'>±${_fp_d["ow_gross_std_M"]:.0f}M σ</div>
+              <div style='font-size:1.25rem; font-weight:600; color:{P["dune"]};'>${fp_dune["ow_gross_mean_M"]:.0f}M</div>
+              <div style='font-size:0.7rem; color:{P["dim"]};'>±${fp_dune["ow_gross_std_M"]:.0f}M σ</div>
             </div>
 
             <div>
               <div style='font-size:0.62rem; color:{P["dim"]}; letter-spacing:1px; margin-bottom:2px;'>AVENGERS OW MEAN</div>
-              <div style='font-size:1.25rem; font-weight:600; color:{P["av"]};'>${_fp_a["ow_gross_mean_M"]:.0f}M</div>
-              <div style='font-size:0.7rem; color:{P["dim"]};'>±${_fp_a["ow_gross_std_M"]:.0f}M σ</div>
+              <div style='font-size:1.25rem; font-weight:600; color:{P["av"]};'>${fp_av["ow_gross_mean_M"]:.0f}M</div>
+              <div style='font-size:0.7rem; color:{P["dim"]};'>±${fp_av["ow_gross_std_M"]:.0f}M σ</div>
             </div>
 
             <div>
               <div style='font-size:0.62rem; color:{P["dim"]}; letter-spacing:1px; margin-bottom:2px;'>DUNE BUDGET</div>
-              <div style='font-size:1.25rem; font-weight:600; color:{P["dune"]};'>${_fp_d["budget_M"]:.0f}M</div>
-              <div style='font-size:0.7rem; color:{P["dim"]};'>+{_fp_d["mktg_phi"]:.0%} mktg → ${_fp_d["budget_M"]*(1+_fp_d["mktg_phi"]):.0f}M all-in</div>
+              <div style='font-size:1.25rem; font-weight:600; color:{P["dune"]};'>${fp_dune["budget_M"]:.0f}M</div>
+              <div style='font-size:0.7rem; color:{P["dim"]};'>+{fp_dune["mktg_phi"]:.0%} mktg → ${fp_dune["budget_M"]*(1+fp_dune["mktg_phi"]):.0f}M all-in</div>
             </div>
 
             <div>
               <div style='font-size:0.62rem; color:{P["dim"]}; letter-spacing:1px; margin-bottom:2px;'>AVENGERS BUDGET</div>
-              <div style='font-size:1.25rem; font-weight:600; color:{P["av"]};'>${_fp_a["budget_M"]:.0f}M</div>
-              <div style='font-size:0.7rem; color:{P["dim"]};'>+{_fp_a["mktg_phi"]:.0%} mktg → ${_fp_a["budget_M"]*(1+_fp_a["mktg_phi"]):.0f}M all-in</div>
+              <div style='font-size:1.25rem; font-weight:600; color:{P["av"]};'>${fp_av["budget_M"]:.0f}M</div>
+              <div style='font-size:0.7rem; color:{P["dim"]};'>+{fp_av["mktg_phi"]:.0%} mktg → ${fp_av["budget_M"]*(1+fp_av["mktg_phi"]):.0f}M all-in</div>
             </div>
 
           </div>
@@ -1719,9 +1719,6 @@ with tab7:
         "A · CORE INPUTS (config.py)</p>",
         unsafe_allow_html=True,
     )
-
-    fp_dune = FILM_PARAMS["DUNE"]
-    fp_av   = FILM_PARAMS["AVENGERS"]
 
     core_rows = [
         ("Release date",                  "Dec 18, 2026",      "Dec 18, 2026",       "OPEN_DATE in config.py"),
