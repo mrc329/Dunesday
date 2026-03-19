@@ -163,11 +163,13 @@ HYPE_SIGNALS = {
     "spiderman": {
         # Spider-Man: Brand New Day — first trailer released 2026-03-18
         # across Sony Pictures official channels (YouTube, X, Instagram, TikTok)
+        # 24hr record: 718.6M combined views — biggest trailer launch in history
+        # (previous record: D&W 365M; NWH 355M; GTA 6 475M non-film)
         "full_trailer_released": True,
         "trailer_date": "2026-03-18",
-        "yt_trailer_views_M": None,   # populated from YouTube API when ID is set
-        "combined_views_M": None,     # update manually after 48hr count
-        "suggested_tier": None,       # auto-calibrated from trailer views
+        "yt_trailer_views_M": 718.6,  # confirmed 24hr count (Hollywood Reporter / Variety)
+        "combined_views_M": 718.6,    # all-platform 24hr total
+        "suggested_tier": "Blockbuster",  # 718.6M >> 350M threshold; hardcoded fallback
     },
     "cinemacon_date": "2026-04-13",
     "disney_presentation_date": "2026-04-16",
