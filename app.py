@@ -1355,7 +1355,7 @@ with tab5:
     pm_c1.metric(
         "Avengers Best OW",
         f"{_poly_ow_odds:.0%}" if _poly_ow_odds else "—",
-        delta=f"OW scalar {_poly_ow_odds and (1.05 if _poly_ow_odds >= 0.70 else 1.00 if _poly_ow_odds >= 0.50 else 0.90 if _poly_ow_odds >= 0.30 else 0.80):.2f}x in MC",
+        delta=(f"OW scalar {(1.05 if _poly_ow_odds >= 0.70 else 1.00 if _poly_ow_odds >= 0.50 else 0.90 if _poly_ow_odds >= 0.30 else 0.80):.2f}x in MC" if _poly_ow_odds else "OW scalar N/A"),
         help="Polymarket: probability Avengers has the best domestic opening weekend of 2026. "
              "This is a direct crowd signal on opening-weekend demand. "
              "Maps to an OW gross multiplier in the Monte Carlo: ≥70% → 1.05×, <30% → 0.80×.",
