@@ -530,8 +530,8 @@ st.divider()
 
 
 # ── TABS ──────────────────────────────────────────────────────────────────────
-tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
-    "SCENARIOS", "IMAX TIMELINE", "LIVE SIGNALS", "DISTRIBUTIONS", "DISNEY DECISION", "TRAILERS", "MODEL",
+tab7, tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+    "MODEL", "SCENARIOS", "IMAX TIMELINE", "LIVE SIGNALS", "DISTRIBUTIONS", "DISNEY DECISION", "TRAILERS",
 ])
 
 
