@@ -530,8 +530,8 @@ st.divider()
 
 
 # ── TABS ──────────────────────────────────────────────────────────────────────
-tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
-    "SCENARIOS", "IMAX TIMELINE", "LIVE SIGNALS", "DISTRIBUTIONS", "DISNEY DECISION", "TRAILERS",
+tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
+    "SCENARIOS", "IMAX TIMELINE", "LIVE SIGNALS", "DISTRIBUTIONS", "DISNEY DECISION", "TRAILERS", "MODEL",
 ])
 
 
@@ -1602,6 +1602,319 @@ with tab6:
             expected closer to the Dec 18 release window.<br><br>
             Dune's lower Wikipedia search interest reflects zero promotional
             material released to date, not audience demand.
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+
+# ── TAB 7: MODEL — ASSUMPTIONS, VARIABLES, FORMULAS ──────────────────────────
+with tab7:
+    st.markdown(
+        f"<p style='font-size:0.58rem; letter-spacing:2px; color:{P['dim']}; margin-bottom:6px;'>"
+        "MODEL ASSUMPTIONS &amp; FORMULA SHEET</p>",
+        unsafe_allow_html=True,
+    )
+
+    # ── OBJECTIVE ─────────────────────────────────────────────────────────────
+    st.markdown(
+        f"""
+        <div style='border-left:2px solid {P['dune']}; padding:10px 18px; margin-bottom:18px;
+                    color:{P['text']}; line-height:1.8; font-size:0.88rem;'>
+        <b style='color:{P['dune']}; letter-spacing:1px;'>OBJECTIVE</b><br>
+        Quantify the net-profit impact on Disney/Marvel of opening
+        <i>Avengers: Doomsday</i> on <b>Dec 18, 2026</b> — the same date WB's
+        <i>Dune: Part Three</i> holds a confirmed 21-day IMAX exclusive —
+        versus moving to <b>May 1, 2027</b> or <b>Jan 16, 2027</b>.<br><br>
+        The model produces a <b>P10 / P50 / P90</b> net-profit distribution for
+        each film under four mutually exclusive scenarios, using a 5,000-trial
+        Monte Carlo simulation with calibrated WOM (word-of-mouth) multipliers,
+        calendar demand weights, and IMAX scarcity constraints.
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    st.markdown(f"<hr style='border-color:{P['card_rule']}; margin:4px 0 18px;'>", unsafe_allow_html=True)
+
+    # ── SECTION A: CORE INPUTS ─────────────────────────────────────────────────
+    st.markdown(
+        f"<p style='font-size:0.62rem; letter-spacing:2px; color:{P['dim']}; margin-bottom:8px;'>"
+        "A · CORE INPUTS (config.py)</p>",
+        unsafe_allow_html=True,
+    )
+
+    fp_dune = FILM_PARAMS["DUNE"]
+    fp_av   = FILM_PARAMS["AVENGERS"]
+
+    core_rows = [
+        ("Release date",                  "Dec 18, 2026",      "Dec 18, 2026",       "OPEN_DATE in config.py"),
+        ("Simulation window",             "45 days",           "45 days",            "DAYS = 45"),
+        ("Opening weekend gross — mean",  f"${fp_dune['ow_gross_mean_M']:.0f}M",
+                                          f"${fp_av['ow_gross_mean_M']:.0f}M",       "FILM_PARAMS[film]['ow_gross_mean_M']"),
+        ("Opening weekend gross — σ",     f"${fp_dune['ow_gross_std_M']:.0f}M",
+                                          f"${fp_av['ow_gross_std_M']:.0f}M",        "ow_gross_std_M  (±1σ band)"),
+        ("Production budget",             f"${fp_dune['budget_M']:.0f}M",
+                                          f"${fp_av['budget_M']:.0f}M",              "budget_M"),
+        ("Marketing multiplier (φ)",      f"{fp_dune['mktg_phi']:.0%}",
+                                          f"{fp_av['mktg_phi']:.0%}",                "All-in cost = budget × (1 + φ)"),
+        ("All-in break-even cost",        f"${fp_dune['budget_M']*(1+fp_dune['mktg_phi']):.0f}M",
+                                          f"${fp_av['budget_M']*(1+fp_av['mktg_phi']):.0f}M",
+                                                                                      "budget_M × 1.50  [cell: =B5*(1+B6)]"),
+        ("Audience score — mean",         f"{fp_dune['audience_mean']}",
+                                          f"{fp_av['audience_mean']}",               "audience_mean  (0–100 RT/CinemaScore proxy)"),
+        ("Audience score — σ",            f"{fp_dune['audience_std']}",
+                                          f"{fp_av['audience_std']}",                "audience_std"),
+        ("International revenue mult — mean", f"{fp_dune['intl_mult_mean']:.2f}×",
+                                          f"{fp_av['intl_mult_mean']:.2f}×",         "intl_mult_mean  (of domestic gross)"),
+        ("International revenue mult — σ",    f"{fp_dune['intl_mult_std']:.2f}",
+                                          f"{fp_av['intl_mult_std']:.2f}",           "intl_mult_std"),
+        ("Studio revenue split",          "60%",               "60%",                "STUDIO_SPLIT = 0.60"),
+    ]
+
+    df_core = pd.DataFrame(core_rows, columns=["Input", "Dune: Pt Three", "Avengers: Doomsday", "Variable / Formula"])
+    st.dataframe(df_core, use_container_width=True, hide_index=True)
+
+    st.markdown(f"<hr style='border-color:{P['card_rule']}; margin:14px 0;'>", unsafe_allow_html=True)
+
+    # ── SECTION B: IMAX CONFIGURATION ─────────────────────────────────────────
+    st.markdown(
+        f"<p style='font-size:0.62rem; letter-spacing:2px; color:{P['dim']}; margin-bottom:8px;'>"
+        "B · IMAX CONFIGURATION (confirmed)</p>",
+        unsafe_allow_html=True,
+    )
+
+    imax_rows = [
+        ("Total US IMAX screens",       "400",    "400",   "SCREEN_INVENTORY['IMAX'] = 400"),
+        ("Dune exclusive window",        "21 days","0 days","Dec 18 – Jan 7  (confirmed WB deal)"),
+        ("Dune screens during exclusive","400",    "0",     "dune_screens_excl / avengers_screens_excl"),
+        ("Split screens after Jan 8",    "200",    "200",   "split_screens = 200 each"),
+        ("IMAX ticket price (national avg)","$23.50","$23.50","BASE_PRICE['IMAX']"),
+        ("IMAX seat capacity",           "285 seats","285 seats","SEAT_CAPACITY['IMAX']"),
+        ("IMAX daily base revenue",      "$4.9M/day","$4.9M/day",
+         "IMAX_DAILY_BASE_M = 4.9  [400 screens × mean occ × $23.50]"),
+        ("Daily IMAX formula",           "screens/400 × cal_mult × decay_hold × wom_mult × $4.9M",
+                                         "same",
+         "core.py: compute_imax_revenue()  [cell: =D4/400*CAL*DECAY*WOM*$4.9]"),
+    ]
+
+    df_imax = pd.DataFrame(imax_rows, columns=["Input", "Dune: Pt Three", "Avengers: Doomsday", "Variable / Formula"])
+    st.dataframe(df_imax, use_container_width=True, hide_index=True)
+
+    st.markdown(f"<hr style='border-color:{P['card_rule']}; margin:14px 0;'>", unsafe_allow_html=True)
+
+    # ── SECTION C: WOM MODEL ──────────────────────────────────────────────────
+    st.markdown(
+        f"<p style='font-size:0.62rem; letter-spacing:2px; color:{P['dim']}; margin-bottom:8px;'>"
+        "C · WORD-OF-MOUTH MODEL</p>",
+        unsafe_allow_html=True,
+    )
+
+    from model.config import WOM_SLOPE, WOM_INTERCEPT
+    wom_rows = [
+        ("WOM formula",   f"wom_mult = {WOM_SLOPE} × audience_score + ({WOM_INTERCEPT})",
+                          "[cell: =WOM_SLOPE*B9+WOM_INTERCEPT]",
+                          "Linear regression on 7 comparable films"),
+        ("Slope",         f"{WOM_SLOPE}", "WOM_SLOPE = 0.0199",
+                          "Calibrated: Endgame, IW, Top Gun, Dune P2, The Flash, Black Adam, DS MoM"),
+        ("Intercept",     f"{WOM_INTERCEPT}", "WOM_INTERCEPT = −0.7748", "Same calibration set"),
+        ("Clamp range",   "0.5 – 1.5×", "max(0.5, formula)", "Prevents extreme outliers"),
+        ("Example @ score=88", f"{max(0.5, WOM_SLOPE*88 + WOM_INTERCEPT):.3f}×",
+                          "[cell: =MAX(0.5, 0.0199*88-0.7748)]",
+                          "Avengers base: ~1.00×"),
+        ("Example @ score=87", f"{max(0.5, WOM_SLOPE*87 + WOM_INTERCEPT):.3f}×",
+                          "[cell: =MAX(0.5, 0.0199*87-0.7748)]",
+                          "Dune base: ~0.98×"),
+        ("WOM effect on holds", "week 2+: hold × clip(wom, 0.6, 1.4)",
+                          "core.py line ~262", "Only activates from week 2 — OW holds are fixed"),
+    ]
+
+    df_wom = pd.DataFrame(wom_rows, columns=["Parameter", "Value", "Excel Cell Equivalent", "Notes"])
+    st.dataframe(df_wom, use_container_width=True, hide_index=True)
+
+    st.markdown(f"<hr style='border-color:{P['card_rule']}; margin:14px 0;'>", unsafe_allow_html=True)
+
+    # ── SECTION D: WEEKLY DECAY CURVE ─────────────────────────────────────────
+    st.markdown(
+        f"<p style='font-size:0.62rem; letter-spacing:2px; color:{P['dim']}; margin-bottom:8px;'>"
+        "D · WEEKLY DECAY — BASE HOLDS (fraction of OW gross retained)</p>",
+        unsafe_allow_html=True,
+    )
+
+    from model.config import WEEKLY_DECAY_BENCHMARKS
+    decay_base = [1.00, 0.56, 0.43, 0.34, 0.27, 0.22, 0.18]   # Neutral MCU — used in Monte Carlo
+    decay_rows = []
+    for wk_idx, hold in enumerate(decay_base):
+        label = f"Week {wk_idx}" if wk_idx == 0 else f"Week {wk_idx}"
+        ow_label = "Opening Weekend" if wk_idx == 0 else ""
+        decay_rows.append((label, f"{hold:.0%}", ow_label,
+                           f"wk_holds_base[{wk_idx}]  [cell: =B{wk_idx+2}/B2]"))
+    df_decay = pd.DataFrame(decay_rows, columns=["Week", "Hold vs OW", "Notes", "Formula Ref"])
+    st.dataframe(df_decay, use_container_width=True, hide_index=True)
+
+    st.caption(
+        "Base curve = Neutral MCU (Avengers default). "
+        "WOM multiplier scales holds from week 2+ so a high audience score "
+        "flattens the curve — modeled as: hold_adj = hold × clip(wom_mult, 0.6, 1.4)."
+    )
+
+    st.markdown(f"<hr style='border-color:{P['card_rule']}; margin:14px 0;'>", unsafe_allow_html=True)
+
+    # ── SECTION E: CALENDAR DEMAND WEIGHTS ────────────────────────────────────
+    st.markdown(
+        f"<p style='font-size:0.62rem; letter-spacing:2px; color:{P['dim']}; margin-bottom:8px;'>"
+        "E · CALENDAR DEMAND WEIGHTS</p>",
+        unsafe_allow_html=True,
+    )
+
+    from model.config import DOW_MULTIPLIERS, HOLIDAY_OVERRIDES
+    dow_names = {0:"Monday",1:"Tuesday",2:"Wednesday",3:"Thursday",4:"Friday",5:"Saturday",6:"Sunday"}
+    dow_rows = [(dow_names[d], f"{m:.2f}×", "DOW_MULTIPLIERS") for d, m in DOW_MULTIPLIERS.items()]
+    holiday_rows = [(f"{m_}/{d_}", f"{mult:.2f}×", key) for (m_, d_), mult in HOLIDAY_OVERRIDES.items()
+                    for key in ["HOLIDAY_OVERRIDES"]]
+    # de-dup holiday rows
+    holiday_rows = [(f"{m_}/{d_}", f"{mult:.2f}×", "HOLIDAY_OVERRIDES") for (m_, d_), mult in HOLIDAY_OVERRIDES.items()]
+
+    cal_rows = dow_rows + holiday_rows
+    df_cal = pd.DataFrame(cal_rows, columns=["Date / Day", "Demand Multiplier", "Source"])
+    c_left, c_right = st.columns([1, 2])
+    with c_left:
+        st.dataframe(df_cal, use_container_width=True, hide_index=True)
+    with c_right:
+        st.markdown(
+            f"""
+            <div style='color:{P['text']}; font-size:0.82rem; line-height:1.9; padding-top:6px;'>
+            <b>How the calendar multiplier works:</b><br>
+            1. Look up day-of-week baseline (Mon–Sun).<br>
+            2. If the date matches a <code>HOLIDAY_OVERRIDES</code> entry, replace baseline.<br>
+            3. Dec 28–30 are floored at 0.75× (post-Christmas lingering demand).<br>
+            4. Each day's gross = OW_gross × hold_wk × <b>cal_mult</b> / 7<br>
+            &nbsp;&nbsp;&nbsp;<span style='font-family:monospace; font-size:0.78rem;'>
+            [cell: =OW * HOLD_WK * CAL / 7]</span>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+    st.markdown(f"<hr style='border-color:{P['card_rule']}; margin:14px 0;'>", unsafe_allow_html=True)
+
+    # ── SECTION F: NET PROFIT FORMULA (FULL WALKTHROUGH) ─────────────────────
+    st.markdown(
+        f"<p style='font-size:0.62rem; letter-spacing:2px; color:{P['dim']}; margin-bottom:8px;'>"
+        "F · NET PROFIT FORMULA — FULL WALKTHROUGH (as if Excel)</p>",
+        unsafe_allow_html=True,
+    )
+
+    st.markdown(
+        f"""
+        <div style='color:{P['text']}; font-size:0.82rem; line-height:2.1;
+                    font-family:monospace; background:transparent; padding:8px 0;'>
+
+        <b style='color:{P['dune']}; font-family:sans-serif; letter-spacing:1px;'>
+        PER TRIAL (each of 5,000 Monte Carlo draws)</b><br><br>
+
+        B2  =  NORM.INV(RAND(), audience_mean, audience_std)
+               <span style='color:{P['dim']};'>→ sampled audience score</span><br>
+
+        B3  =  MAX(0.5,  WOM_SLOPE × B2 + WOM_INTERCEPT)
+               <span style='color:{P['dim']};'>→ WOM multiplier  (e.g. 1.02×)</span><br><br>
+
+        B4  =  NORM.INV(RAND(),  ow_gross_mean × scenario_adj × spidey_adj × poly_adj,
+               &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;ow_gross_std  × scenario_adj)
+               <span style='color:{P['dim']};'>→ opening weekend gross ($M)</span><br><br>
+
+        <b style='color:{P['dim']}; font-family:sans-serif;'>Domestic gross (days 1–45)</b><br>
+        B5  =  SUMPRODUCT( B4 × hold[wk] × wom_adj[wk] × cal_mult[day] / 7 )
+               <span style='color:{P['dim']};'>→ for each day:  OW × hold × WOM-adj × CAL / 7</span><br>
+        B6  =  B5 × STUDIO_SPLIT  <span style='color:{P['dim']};'>→ studio domestic ($M)</span><br><br>
+
+        <b style='color:{P['dim']}; font-family:sans-serif;'>IMAX revenue</b><br>
+        B7  =  SUM( IMAX_DAILY_BASE_M × (screens[day]/400) × cal_mult[day] × decay[wk] × B3 )
+               <span style='color:{P['dim']};'>→ total IMAX gross ($M)</span><br>
+        B8  =  B7 × STUDIO_SPLIT  <span style='color:{P['dim']};'>→ studio IMAX ($M)</span><br><br>
+
+        <b style='color:{P['dim']}; font-family:sans-serif;'>International</b><br>
+        B9  =  B5 × MAX(0.5, NORM.INV(RAND(), intl_mult_mean, intl_mult_std)) × STUDIO_SPLIT
+               <span style='color:{P['dim']};'>→ studio international ($M)</span><br><br>
+
+        <b style='color:{P['dim']}; font-family:sans-serif;'>Cost &amp; net profit</b><br>
+        B10 =  budget_M × (1 + mktg_phi)
+               <span style='color:{P['dim']};'>→ all-in cost ($M)</span><br>
+        <b>B11 =  (B6 + B8 + B9) − B10
+               <span style='color:{P['dune']};'>→ NET STUDIO PROFIT ($M)  ← output cell</span></b><br><br>
+
+        <b style='color:{P['dim']}; font-family:sans-serif;'>Output statistics (over 5,000 trials)</b><br>
+        P10  =  PERCENTILE(B11:range, 0.10) &nbsp;&nbsp;
+        P50  =  PERCENTILE(B11:range, 0.50) &nbsp;&nbsp;
+        P90  =  PERCENTILE(B11:range, 0.90)<br>
+        Break-even%  =  COUNTIF(B11:range, "&gt;0") / 5000 × 100
+
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    st.markdown(f"<hr style='border-color:{P['card_rule']}; margin:14px 0;'>", unsafe_allow_html=True)
+
+    # ── SECTION G: SCENARIO OW ADJUSTMENTS ────────────────────────────────────
+    st.markdown(
+        f"<p style='font-size:0.62rem; letter-spacing:2px; color:{P['dim']}; margin-bottom:8px;'>"
+        "G · SCENARIO OW MULTIPLIERS</p>",
+        unsafe_allow_html=True,
+    )
+
+    from model.core import SCENARIO_OW_ADJ
+    scen_rows = []
+    for (film, sk), mult in SCENARIO_OW_ADJ.items():
+        scen_rows.append((SCENARIOS[sk]["label"], film.title(), f"{mult:.2f}×",
+                          SCENARIOS[sk]["description"]))
+    df_scen = pd.DataFrame(scen_rows, columns=["Scenario", "Film", "OW Gross Multiplier", "Description"])
+    st.dataframe(df_scen, use_container_width=True, hide_index=True)
+
+    st.caption(
+        "Scenario OW multiplier is applied to ow_gross_mean_M before sampling. "
+        "E.g. Avengers in Scenario B gets 1.22× — a $240M mean becomes $293M mean — "
+        "reflecting uncontested May holiday positioning."
+    )
+
+    st.markdown(f"<hr style='border-color:{P['card_rule']}; margin:14px 0;'>", unsafe_allow_html=True)
+
+    # ── SECTION H: KEY ASSUMPTIONS & CAVEATS ─────────────────────────────────
+    st.markdown(
+        f"<p style='font-size:0.62rem; letter-spacing:2px; color:{P['dim']}; margin-bottom:8px;'>"
+        "H · KEY ASSUMPTIONS &amp; WHAT THE MODEL DOES NOT CAPTURE</p>",
+        unsafe_allow_html=True,
+    )
+
+    h_col1, h_col2 = st.columns(2)
+    with h_col1:
+        st.markdown(
+            f"""
+            <div style='color:{P['text']}; font-size:0.82rem; line-height:1.9;'>
+            <b style='color:{P['dune']}'>Assumptions baked in</b><br>
+            • WB's 21-day IMAX exclusive is <b>confirmed</b> and non-negotiable<br>
+            • Studio keeps 60% of gross (all formats)<br>
+            • Marketing spend = 50% of production budget<br>
+            • International = domestic × intl_mult (correlated in mean, independent σ)<br>
+            • Calendar multipliers calibrated from Avatar (2022) and TFA (2015) Christmas data<br>
+            • Audience score drives WOM via linear regression on 7 comparable films<br>
+            • Polymarket odds are treated as crowd-wisdom priors, not direct inputs
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+    with h_col2:
+        st.markdown(
+            f"""
+            <div style='color:{P['text']}; font-size:0.82rem; line-height:1.9;'>
+            <b style='color:{P['av']}'>What the model does NOT capture</b><br>
+            • PLF / 3D / standard-screen revenue (IMAX + domestic gross proxy only)<br>
+            • Streaming / home-video revenue (upside not modeled)<br>
+            • China box office (excluded — China often reported separately)<br>
+            • Competitive spillover: if both hold, audiences may self-sort by preference<br>
+            • Marketing effectiveness variance (φ held fixed at 50%)<br>
+            • The Polymarket full-year market includes a calendar-year bias vs. Avengers'
+              2-week Dec run — ratio signal is directional, not exact
             </div>
             """,
             unsafe_allow_html=True,
