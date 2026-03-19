@@ -935,8 +935,12 @@ def fetch_and_calibrate(base_dune_score: int = 87, base_av_score: int = 88) -> d
         signals["spiderman"]["yt_engagement_ratio"] = round(spidey_likes / spidey_views, 4) \
                                                       if spidey_views else None
         if spidey_trailer_fresh:
-            # Day 1: use like/view ratio — time-independent, fair across release dates
+            # Day 1: prefer like/view ratio (time-independent), but fall back to
+            # view count if likeCount is unavailable — YouTube's public API has
+            # hidden likeCount since Nov 2021, so likes is often 0 via API key.
             spidey_suggested_tier = calibrate_from_trailer_engagement(spidey_views, spidey_likes)
+            if spidey_suggested_tier is None:
+                spidey_suggested_tier = calibrate_from_spidey_trailer(spidey_views_M)
         else:
             # Day 2+: use 24h view count benchmarks
             spidey_suggested_tier = calibrate_from_spidey_trailer(spidey_views_M)
