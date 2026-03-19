@@ -1616,6 +1616,77 @@ with tab7:
         unsafe_allow_html=True,
     )
 
+    # ── AT-A-GLANCE SUMMARY BLOCK ──────────────────────────────────────────────
+    _fp_d = FILM_PARAMS["DUNE"]
+    _fp_a = FILM_PARAMS["AVENGERS"]
+    st.markdown(
+        f"""
+        <div style='
+            background:{P["info_bg"]};
+            border:1px solid {P["card_rule"]};
+            border-radius:6px;
+            padding:18px 24px 14px;
+            margin-bottom:20px;
+        '>
+          <p style='font-size:0.58rem; letter-spacing:2px; color:{P["dim"]}; margin:0 0 12px;'>
+            KEY ASSUMPTIONS AT A GLANCE
+          </p>
+          <div style='display:grid; grid-template-columns:repeat(4,1fr); gap:12px 24px;'>
+
+            <div>
+              <div style='font-size:0.62rem; color:{P["dim"]}; letter-spacing:1px; margin-bottom:2px;'>SIMULATIONS</div>
+              <div style='font-size:1.25rem; font-weight:600; color:{P["text"]};'>5,000</div>
+              <div style='font-size:0.7rem; color:{P["dim"]};'>Monte Carlo trials</div>
+            </div>
+
+            <div>
+              <div style='font-size:0.62rem; color:{P["dim"]}; letter-spacing:1px; margin-bottom:2px;'>OUTPUT</div>
+              <div style='font-size:1.25rem; font-weight:600; color:{P["text"]};'>P10 · P50 · P90</div>
+              <div style='font-size:0.7rem; color:{P["dim"]};'>net-profit distribution</div>
+            </div>
+
+            <div>
+              <div style='font-size:0.62rem; color:{P["dim"]}; letter-spacing:1px; margin-bottom:2px;'>WINDOW</div>
+              <div style='font-size:1.25rem; font-weight:600; color:{P["text"]};'>45 days</div>
+              <div style='font-size:0.7rem; color:{P["dim"]};'>from opening date</div>
+            </div>
+
+            <div>
+              <div style='font-size:0.62rem; color:{P["dim"]}; letter-spacing:1px; margin-bottom:2px;'>IMAX EXCLUSIVE</div>
+              <div style='font-size:1.25rem; font-weight:600; color:{P["dune"]};'>21 days</div>
+              <div style='font-size:0.7rem; color:{P["dim"]};'>Dune · Dec 18 – Jan 7</div>
+            </div>
+
+            <div>
+              <div style='font-size:0.62rem; color:{P["dim"]}; letter-spacing:1px; margin-bottom:2px;'>DUNE OW MEAN</div>
+              <div style='font-size:1.25rem; font-weight:600; color:{P["dune"]};'>${_fp_d["ow_gross_mean_M"]:.0f}M</div>
+              <div style='font-size:0.7rem; color:{P["dim"]};'>±${_fp_d["ow_gross_std_M"]:.0f}M σ</div>
+            </div>
+
+            <div>
+              <div style='font-size:0.62rem; color:{P["dim"]}; letter-spacing:1px; margin-bottom:2px;'>AVENGERS OW MEAN</div>
+              <div style='font-size:1.25rem; font-weight:600; color:{P["av"]};'>${_fp_a["ow_gross_mean_M"]:.0f}M</div>
+              <div style='font-size:0.7rem; color:{P["dim"]};'>±${_fp_a["ow_gross_std_M"]:.0f}M σ</div>
+            </div>
+
+            <div>
+              <div style='font-size:0.62rem; color:{P["dim"]}; letter-spacing:1px; margin-bottom:2px;'>DUNE BUDGET</div>
+              <div style='font-size:1.25rem; font-weight:600; color:{P["dune"]};'>${_fp_d["budget_M"]:.0f}M</div>
+              <div style='font-size:0.7rem; color:{P["dim"]};'>+{_fp_d["mktg_phi"]:.0%} mktg → ${_fp_d["budget_M"]*(1+_fp_d["mktg_phi"]):.0f}M all-in</div>
+            </div>
+
+            <div>
+              <div style='font-size:0.62rem; color:{P["dim"]}; letter-spacing:1px; margin-bottom:2px;'>AVENGERS BUDGET</div>
+              <div style='font-size:1.25rem; font-weight:600; color:{P["av"]};'>${_fp_a["budget_M"]:.0f}M</div>
+              <div style='font-size:0.7rem; color:{P["dim"]};'>+{_fp_a["mktg_phi"]:.0%} mktg → ${_fp_a["budget_M"]*(1+_fp_a["mktg_phi"]):.0f}M all-in</div>
+            </div>
+
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
     # ── OBJECTIVE ─────────────────────────────────────────────────────────────
     st.markdown(
         f"""
