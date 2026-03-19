@@ -384,8 +384,8 @@ def calibrate_from_wikipedia(last_7d_views: int, wow_pct: float, film: str) -> f
 # TMDB movie IDs — look up at themoviedb.org (search title, copy integer from URL)
 # e.g. themoviedb.org/movie/693134  →  ID is 693134
 TMDB_MOVIE_IDS = {
-    "avengers": None,   # TODO: set after looking up "Avengers: Doomsday" on TMDB
-    "dune":     None,   # TODO: set after looking up "Dune: Part Three" on TMDB
+    "avengers": 1003596,   # Avengers: Doomsday — themoviedb.org/movie/1003596
+    "dune":     1170608,   # Dune: Part Three  — themoviedb.org/movie/1170608
 }
 
 def fetch_tmdb_signals() -> dict:
