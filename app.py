@@ -1410,13 +1410,13 @@ With $1.1M+ traded on these two markets, the signal carries meaningful weight.
 
 | Market | Avengers odds | What it measures |
 |---|---|---|
-| Best opening weekend in 2026 | **{_poly_ow_odds:.0%}** | Pure opening-weekend demand |
-| Highest full-year gross in 2026 | **{_poly_fy_odds:.0%}** | Full domestic run (calendar year) |
+| Best opening weekend in 2026 | **{f"{_poly_ow_odds:.0%}" if _poly_ow_odds is not None else "—"}** | Pure opening-weekend demand |
+| Highest full-year gross in 2026 | **{f"{_poly_fy_odds:.0%}" if _poly_fy_odds is not None else "—"}** | Full domestic run (calendar year) |
 
 **Why the gap matters**
 
-The OW/FY ratio is **{_poly_ratio:.1f}x**. Avengers is the heavy favorite to open
-biggest, but the crowd gives it only {_poly_fy_odds:.0%} to dominate the full year.
+The OW/FY ratio is **{f"{_poly_ratio:.1f}x" if _poly_ratio is not None else "—"}**. Avengers is the heavy favorite to open
+biggest, but the crowd gives it only {f"{_poly_fy_odds:.0%}" if _poly_fy_odds is not None else "—"} to dominate the full year.
 That gap is the market pricing in the IMAX conflict: Avengers loses 400 IMAX
 screens for 21 days, while Dune banks Christmas on all of them.
 
@@ -1431,15 +1431,15 @@ not a pure legs signal. The ratio overstates the legs problem slightly, but the
 **How it enters the Monte Carlo**
 
 *Option A — OW scalar on opening weekend gross:*
-The OW odds ({_poly_ow_odds:.0%}) map to a **{_poly_ow_odds and (1.05 if _poly_ow_odds >= 0.70 else 1.00 if _poly_ow_odds >= 0.50 else 0.90 if _poly_ow_odds >= 0.30 else 0.80):.2f}x multiplier** applied to Avengers' mean
+The OW odds ({f"{_poly_ow_odds:.0%}" if _poly_ow_odds is not None else "—"}) map to a **{f"{(1.05 if _poly_ow_odds >= 0.70 else 1.00 if _poly_ow_odds >= 0.50 else 0.90 if _poly_ow_odds >= 0.30 else 0.80):.2f}x" if _poly_ow_odds is not None else "—"}** applied to Avengers' mean
 opening-weekend gross in every trial. At 75% the crowd confirms a blockbuster
 opening — the model gets a +5% OW nudge. If odds fell to 40%, the model would
 apply a −10% OW penalty. This is the crowd acting as a real-money sentiment
 check on the $240M base assumption.
 
 *Option B — Scenario weights:*
-The OW/FY ratio ({_poly_ratio:.1f}x) maps to how much financial merit each scenario
-has, weighted by what the market is implicitly pricing. At {_poly_ratio:.1f}x:
+The OW/FY ratio ({f"{_poly_ratio:.1f}x" if _poly_ratio is not None else "—"}) maps to how much financial merit each scenario
+has, weighted by what the market is implicitly pricing. At {f"{_poly_ratio:.1f}x" if _poly_ratio is not None else "—"}:
 
 | Scenario | Weight | Avengers P50 |
 |---|---|---|
