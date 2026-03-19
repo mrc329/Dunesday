@@ -12,7 +12,8 @@ import datetime
 from model.config import (FILM_PARAMS, IMAX_CONFIG,
                           AUDIENCE_SCORE_BENCHMARKS,
                           SPIDEY_IMPACT_ADJ, WEEKLY_DECAY_BENCHMARKS)
-from model.core import run_all_scenarios, imax_gap_summary, SCENARIOS
+from model.core import (run_all_scenarios, imax_gap_summary, SCENARIOS,
+                        polymarket_scenario_weights)
 from model.signals import (fetch_and_calibrate, YOUTUBE_TRAILER_URLS,
                            YOUTUBE_VIDEO_IDS, fetch_youtube_views)
 
@@ -339,8 +340,12 @@ with st.sidebar:
         "PostTrak/CinemaScore-style satisfaction index (0–100). "
         "Live signals auto-calibrate from these baselines."
     )
-    base_dune_aud = st.slider("Dune base score", 60, 100, 87)
-    base_av_aud   = st.slider("Avengers base score", 60, 100, 88)
+    base_dune_aud = st.slider("Dune base score", 60, 100, 87,
+        help="PostTrak/CinemaScore-style audience satisfaction (0–100). "
+             "87 = Dune: Part Two benchmark. Live signals adjust this up or down.")
+    base_av_aud   = st.slider("Avengers base score", 60, 100, 88,
+        help="88 = Infinity War / Endgame baseline. Adjusted down if teaser decay "
+             "matches Love & Thunder pattern, up if engagement matches Endgame.")
 
     with st.expander("Score benchmarks"):
         bm_rows = [
@@ -370,11 +375,15 @@ with st.sidebar:
     with c1:
         adj = cal["dune_adj"]
         st.metric("Dune score", f"{cal['dune_calibrated']:.0f}",
-                  delta=f"{adj:+.1f}" if adj != 0 else "no adj")
+                  delta=f"{adj:+.1f}" if adj != 0 else "no adj",
+                  help=f"Live-calibrated audience score. Base: {cal['dune_base']} + "
+                       f"signal adjustment: {adj:+.1f}. Drives WOM multiplier and weekly hold rates.")
     with c2:
         adj = cal["avengers_adj"]
         st.metric("Avengers score", f"{cal['avengers_calibrated']:.0f}",
-                  delta=f"{adj:+.1f}" if adj != 0 else "no adj")
+                  delta=f"{adj:+.1f}" if adj != 0 else "no adj",
+                  help=f"Live-calibrated audience score. Base: {cal['avengers_base']} + "
+                       f"signal adjustment: {adj:+.1f}. Spider-Man tier applied on top.")
 
     st.caption(f"Sources: {' · '.join(cal['sources'])}")
     if cal.get("notes"):
@@ -386,6 +395,9 @@ with st.sidebar:
         "Spider-Man: Brand New Day (Jul 25 2026)",
         options=["Disappoints", "Soft", "Neutral", "Strong", "Blockbuster"],
         value="Neutral",
+        help="Spider-Man opens Jul 25 — 5 months before Avengers. Its performance "
+             "is an MCU brand health signal. Blockbuster = +4pts to Avengers score + 1.10x OW. "
+             "Disappoints = −5pts + 0.90x OW. Auto-suggested from trailer view count when YouTube key is set.",
     )
     spidey_adj = SPIDEY_IMPACT_ADJ[spidey_tier]
     spidey_color = (P["av"] if spidey_adj < 0 else
@@ -400,10 +412,16 @@ with st.sidebar:
         st.caption(f"Trailer signal suggests: **{_auto_tier}** ↑ update slider")
 
     st.divider()
-    override = st.toggle("Manual score override", value=False)
+    override = st.toggle("Manual score override", value=False,
+        help="When off, audience scores come from live signal calibration (YouTube + Wikipedia + "
+             "TMDB + Trakt + Polymarket). Turn on to set them manually for scenario exploration.")
     if override:
-        dune_aud = st.slider("Dune (manual)", 60, 100, int(cal["dune_calibrated"]))
-        av_aud   = st.slider("Avengers (manual)", 60, 100, int(cal["avengers_calibrated"]))
+        dune_aud = st.slider("Dune (manual)", 60, 100, int(cal["dune_calibrated"]),
+            help="Override Dune audience score. 87 = Part Two actual. "
+                 "Below 80 = mixed reception; above 92 = exceptional (Part One/Two territory).")
+        av_aud   = st.slider("Avengers (manual)", 60, 100, int(cal["avengers_calibrated"]),
+            help="Override Avengers audience score. 88 = IW/Endgame baseline. "
+                 "Below 80 = Love & Thunder territory (76). Above 93 = Deadpool & Wolverine territory (95).")
         st.caption("⚠️ Overriding live calibration")
     else:
         dune_aud = int(cal["dune_calibrated"])
@@ -412,11 +430,17 @@ with st.sidebar:
 
     st.divider()
     st.markdown("**International Multipliers**")
-    dune_intl = st.slider("Dune intl mult", 0.8, 2.5, 1.48, 0.05)
-    av_intl   = st.slider("Avengers intl mult", 1.0, 3.5, 2.18, 0.05)
+    dune_intl = st.slider("Dune intl mult", 0.8, 2.5, 1.48, 0.05,
+        help="Ratio of international gross to domestic gross. 1.48 = Dune: Part Two actual. "
+             "Lower end (~0.9) = limited international appeal; upper end (~2.2) = global phenomenon.")
+    av_intl   = st.slider("Avengers intl mult", 1.0, 3.5, 2.18, 0.05,
+        help="2.18 = MCU historical average. Endgame was 2.1×, IW was 2.2×. "
+             "China market uncertainty adds downside risk — slide down to 1.6× for China-out scenario.")
 
     st.markdown("**Simulation**")
-    n_trials = st.select_slider("MC trials", [500, 1000, 2000, 5000], value=1000)
+    n_trials = st.select_slider("MC trials", [500, 1000, 2000, 5000], value=1000,
+        help="Number of Monte Carlo simulation trials. 1,000 is fast and sufficient for P50. "
+             "5,000 narrows the P10/P90 confidence interval by ~2× but takes ~5× longer to run.")
 
     st.divider()
     st.markdown("**IMAX Config (Locked)**")
@@ -431,12 +455,21 @@ with st.sidebar:
 
 
 # ── RUN MODEL ─────────────────────────────────────────────────────────────────
+_poly_sig       = signals.get("polymarket", {})
+_poly_ow_odds   = _poly_sig.get("avengers_ow_odds")
+_poly_fy_odds   = _poly_sig.get("avengers_full_year_odds")
+_poly_ratio     = _poly_sig.get("ow_decay_ratio")
+_poly_move_sig  = _poly_sig.get("move_signal")
+_poly_source    = _poly_sig.get("source", "fallback")
+_poly_weights   = polymarket_scenario_weights(_poly_ratio)
+
 with st.spinner("Running Monte Carlo..."):
     results = run_all_scenarios(
         n=n_trials,
         dune_aud=dune_aud, av_aud=av_aud,
         dune_intl=dune_intl, av_intl=av_intl,
         spidey_tier=spidey_tier,
+        polymarket_ow_odds=_poly_ow_odds,
     )
     imax = imax_gap_summary()
 
@@ -465,18 +498,33 @@ k1, k2, k3, k4, k5, k6 = st.columns(6)
 sc_a = results["A_Both_Hold"]
 
 with k1:
-    st.metric("Dune P50 Profit", f"${sc_a['DUNE']['p50']:.0f}M", delta="100% break-even")
+    st.metric("Dune P50 Profit", f"${sc_a['DUNE']['p50']:.0f}M", delta="100% break-even",
+              help="Median net profit for Dune: Part Three in Scenario A (both films hold Dec 18). "
+                   "P50 = 50th percentile of 5,000 MC trials. Budget: $175M + ~$88M P&A = $263M all-in.")
 with k2:
     st.metric("Avengers P50 Profit", f"${sc_a['AVENGERS']['p50']:.0f}M",
-              delta=f"{sc_a['AVENGERS']['breakeven_pct']:.0f}% BE")
+              delta=f"{sc_a['AVENGERS']['breakeven_pct']:.0f}% BE",
+              help="Median net profit for Avengers: Doomsday with zero IMAX screens for 21 days. "
+                   f"Break-even probability: {sc_a['AVENGERS']['breakeven_pct']:.0f}%. "
+                   "Budget: $550M + ~$275M P&A = $825M all-in.")
 with k3:
-    st.metric("IMAX Gap", f"${imax['gap']:.1f}M", delta="Dune advantage")
+    st.metric("IMAX Gap", f"${imax['gap']:.1f}M", delta="Dune advantage",
+              help="Total 45-day IMAX revenue difference: Dune minus Avengers. "
+                   "Dune gets all 400 US IMAX screens for 21 days. "
+                   "Avengers gets zero IMAX until Jan 8, then splits 200 screens.")
 with k4:
-    st.metric("Dune Xmas IMAX", f"${imax['xmas_day_dune']:.2f}M")
+    st.metric("Dune Xmas IMAX", f"${imax['xmas_day_dune']:.2f}M",
+              help="Dune's estimated Christmas Day (Dec 25) IMAX revenue. "
+                   "Day 7 of exclusive window — all 400 screens, peak holiday multiplier (1.65×).")
 with k5:
-    st.metric("Avengers Xmas IMAX", "$0.00M", delta="Zero screens", delta_color="inverse")
+    st.metric("Avengers Xmas IMAX", "$0.00M", delta="Zero screens", delta_color="inverse",
+              help="Avengers earns zero IMAX revenue on Christmas Day. "
+                   "Dune's 21-day exclusive window runs Dec 18 – Jan 7, covering the entire holiday premium.")
 with k6:
-    st.metric("Avengers Locked Out", "21 days", delta="Dec 18 – Jan 7", delta_color="off")
+    st.metric("Avengers Locked Out", "21 days", delta="Dec 18 – Jan 7", delta_color="off",
+              help="Avengers is shut out of all 400 US IMAX screens for its first 21 days. "
+                   "This is the confirmed exclusive window Dune negotiated. "
+                   "Avengers' first IMAX show is Jan 8, splitting 200 screens with Dune.")
 
 st.divider()
 
@@ -510,6 +558,16 @@ with tab1:
         textposition="outside",
         textfont=dict(size=10, color=P["dune"]),
         cliponaxis=False,
+        customdata=list(zip(dune_p10s, dune_p90s,
+                            [results[sk]["DUNE"]["breakeven_pct"] for sk in sk_list])),
+        hovertemplate=(
+            "<b>Dune — %{x}</b><br>"
+            "P50 (median): <b>$%{y:.0f}M</b><br>"
+            "P10 (downside): $%{customdata[0]:.0f}M<br>"
+            "P90 (upside): $%{customdata[1]:.0f}M<br>"
+            "Break-even: %{customdata[2]:.0f}%"
+            "<extra></extra>"
+        ),
         error_y=dict(
             type="data", symmetric=False,
             array=[p90 - p50 for p90, p50 in zip(dune_p90s, dune_p50s)],
@@ -524,6 +582,16 @@ with tab1:
         textposition="outside",
         textfont=dict(size=10, color=P["av"]),
         cliponaxis=False,
+        customdata=list(zip(av_p10s, av_p90s,
+                            [results[sk]["AVENGERS"]["breakeven_pct"] for sk in sk_list])),
+        hovertemplate=(
+            "<b>Avengers — %{x}</b><br>"
+            "P50 (median): <b>$%{y:.0f}M</b><br>"
+            "P10 (downside): $%{customdata[0]:.0f}M<br>"
+            "P90 (upside): $%{customdata[1]:.0f}M<br>"
+            "Break-even: %{customdata[2]:.0f}%"
+            "<extra></extra>"
+        ),
         error_y=dict(
             type="data", symmetric=False,
             array=[p90 - p50 for p90, p50 in zip(av_p90s, av_p50s)],
@@ -568,21 +636,27 @@ with tab2:
         subplot_titles=("Screen Allocation", "Daily IMAX Revenue ($M)"),
         vertical_spacing=0.14,
     )
-    fig2.add_trace(go.Bar(x=date_labels, y=dune_screens,
-                          name="Dune", marker_color=P["dune"]), row=1, col=1)
-    fig2.add_trace(go.Bar(x=date_labels, y=av_screens,
-                          name="Avengers", marker_color=P["av"]), row=1, col=1)
+    fig2.add_trace(go.Bar(x=date_labels, y=dune_screens, name="Dune",
+                          marker_color=P["dune"],
+                          hovertemplate="%{x}<br>Dune IMAX screens: <b>%{y}</b><extra></extra>"),
+                  row=1, col=1)
+    fig2.add_trace(go.Bar(x=date_labels, y=av_screens, name="Avengers",
+                          marker_color=P["av"],
+                          hovertemplate="%{x}<br>Avengers IMAX screens: <b>%{y}</b><extra></extra>"),
+                  row=1, col=1)
     fig2.add_trace(go.Scatter(
         x=date_labels, y=imax["dune_daily"],
         name="Dune IMAX rev",
         line=dict(color=P["dune"], width=2),
         fill="tozeroy", fillcolor=P["fill_dune"],
+        hovertemplate="%{x}<br>Dune IMAX revenue: <b>$%{y:.2f}M</b><extra></extra>",
     ), row=2, col=1)
     fig2.add_trace(go.Scatter(
         x=date_labels, y=imax["avengers_daily"],
         name="Avengers IMAX rev",
         line=dict(color=P["av"], width=2),
         fill="tozeroy", fillcolor=P["fill_av"],
+        hovertemplate="%{x}<br>Avengers IMAX revenue: <b>$%{y:.2f}M</b><extra></extra>",
     ), row=2, col=1)
 
     # add_vline with string (categorical) x-axes triggers a Plotly bug in newer
@@ -613,18 +687,30 @@ with tab2:
             )
 
     fig2.update_layout(**_layout(P, height=520, barmode="stack",
-                                 margin=dict(t=44, b=40, l=52, r=16)))
+                                 margin=dict(t=44, b=40, l=52, r=16),
+                                 hovermode="x unified"))
     fig2.update_xaxes(tickangle=45, nticks=15, showgrid=False,
-                      showline=True, linecolor=P["axis"], linewidth=0.5)
+                      showline=True, linecolor=P["axis"], linewidth=0.5,
+                      showspikes=True, spikemode="across",
+                      spikesnap="cursor", spikecolor=P["vline_ref"],
+                      spikethickness=1, spikedash="dot")
     fig2.update_yaxes(showgrid=False, showline=False, zeroline=False)
     st.plotly_chart(fig2, use_container_width=True)
 
     c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Dune excl window",     f"${imax['dune_excl_rev']:.1f}M", "Days 1–21")
-    c2.metric("Avengers excl window", "$0.0M", "Zero screens", delta_color="inverse")
-    c3.metric("Dune 45-day IMAX",     f"${imax['dune_total']:.1f}M")
+    c1.metric("Dune excl window", f"${imax['dune_excl_rev']:.1f}M", "Days 1–21",
+              help="Dune's IMAX revenue during the 21-day exclusive window (Dec 18 – Jan 7). "
+                   "All 400 US IMAX screens, peak holiday calendar, no competition.")
+    c2.metric("Avengers excl window", "$0.0M", "Zero screens", delta_color="inverse",
+              help="Avengers earns exactly $0 from IMAX during Dec 18 – Jan 7. "
+                   "This is the direct financial cost of the date conflict.")
+    c3.metric("Dune 45-day IMAX", f"${imax['dune_total']:.1f}M",
+              help="Dune's total IMAX revenue over 45 days: 21-day exclusive (400 screens) "
+                   "+ 24-day split (200 screens). Includes daily calendar and decay multipliers.")
     c4.metric("Avengers 45-day IMAX", f"${imax['avengers_total']:.1f}M",
-              delta=f"-${imax['gap']:.1f}M vs Dune", delta_color="inverse")
+              delta=f"-${imax['gap']:.1f}M vs Dune", delta_color="inverse",
+              help="Avengers' total IMAX revenue over 45 days, starting Jan 8 with only 200 split screens. "
+                   f"The ${imax['gap']:.1f}M gap is pure lost revenue from the exclusive window.")
 
 
 # ── TAB 3: LIVE SIGNALS ───────────────────────────────────────────────────────
@@ -711,11 +797,16 @@ with tab3:
                 textfont=dict(size=10, color=P["av"]),
                 cliponaxis=False,
                 showlegend=False,
+                hovertemplate="%{x}: <b>%{y:.0f}M views</b><br>"
+                              "T1→this ratio: %{customdata:.0%}"
+                              "<extra></extra>",
+                customdata=[v / vals_decay[0] if vals_decay[0] > 0 else 0 for v in vals_decay],
             ))
             fig_d.add_trace(go.Scatter(
                 x=labels_decay, y=vals_decay,
                 line=dict(color=P["av"], dash="dot", width=1),
                 mode="lines", showlegend=False,
+                hoverinfo="skip",
             ))
             t1 = vals_decay[0] if vals_decay[0] > 0 else 1
             fig_d.add_hline(
@@ -738,12 +829,7 @@ with tab3:
             ))
             st.plotly_chart(fig_d, use_container_width=True)
 
-        _cal_sources = cal.get("sources", [])
-        _trends_live = "Google Trends" in _cal_sources
-        _reddit_live = "Reddit API" in _cal_sources
-
         # YouTube total views across all 4 teasers
-        _av_metrics = st.columns(2) if _trends_live else None
         if yt_live:
             av_yt_total = sum(
                 yt_videos[YOUTUBE_VIDEO_IDS[s]]["views"]
@@ -756,10 +842,12 @@ with tab3:
                 if YOUTUBE_VIDEO_IDS.get(s) and YOUTUBE_VIDEO_IDS[s] in yt_videos
             )
             _av_eng_ratio = av_yt_likes / av_yt_total if av_yt_total else None
-            _yt_col = _av_metrics[0] if _av_metrics else st
-            _yt_col.metric("YT teaser views",
+            st.metric("YT teaser views",
                            f"{av_yt_total / 1_000_000:.0f}M" if av_yt_total else "—",
-                           delta=f"T1–T4 combined · {yt_fetched[:10]}")
+                           delta=f"T1–T4 combined · {yt_fetched[:10]}",
+                           help="Combined YouTube view count across all 4 Avengers teasers. "
+                                "Benchmarks: Endgame 289M T1, IW 230M T1, D&W 365M T1. "
+                                "≥300M combined → +4pts score. <100M → −5pts.")
             if _av_eng_ratio is not None:
                 _av_color = P["av"]
                 _av_dim   = P["dim"]
@@ -772,24 +860,27 @@ with tab3:
                     unsafe_allow_html=True,
                 )
         else:
-            _yt_col = _av_metrics[0] if _av_metrics else st
-            _yt_col.metric("YT trailer views",
-                           f"{av_sig['yt_trailer_views']:,}" if av_sig.get("yt_trailer_views") else "—",
-                           delta="Full trailer not released" if not av_sig.get("full_trailer_out") else "Live")
+            st.metric("YT trailer views",
+                      f"{av_sig['yt_trailer_views']:,}" if av_sig.get("yt_trailer_views") else "—",
+                      delta="Full trailer not released" if not av_sig.get("full_trailer_out") else "Live",
+                      help="Full trailer 24h YouTube view count. Add YOUTUBE_API_KEY to Streamlit secrets "
+                           "to enable live data. Benchmarks: Endgame 289M, IW 230M, D&W 365M.")
 
-        if _trends_live:
-            _av_metrics[1].metric("Trends interest",
-                                  f"{av_sig.get('trends_interest', '—')}/100",
-                                  delta="Google Trends US")
-
-        if _reddit_live and (av_sig.get("reddit_hot_avg") is not None or av_sig.get("reddit_posts_24h") is not None):
-            r1, r2 = st.columns(2)
-            r1.metric("r/marvelstudios hot avg",
-                      f"{av_sig['reddit_hot_avg']:,.0f}" if av_sig.get("reddit_hot_avg") is not None else "—",
-                      delta="Upvote velocity")
-            r2.metric("r/marvelstudios posts/24h",
-                      str(av_sig["reddit_posts_24h"]) if av_sig.get("reddit_posts_24h") is not None else "—",
-                      delta="Post volume")
+        # Wikipedia pageviews
+        _av_wiki_7d  = av_sig.get("wiki_views_7d")
+        _av_wiki_wow = av_sig.get("wiki_wow_pct")
+        w1, w2 = st.columns(2)
+        w1.metric("Wikipedia views (7d)",
+                  f"{_av_wiki_7d:,}" if _av_wiki_7d else "—",
+                  delta="Research interest · no API key",
+                  help="Wikipedia pageviews for 'Avengers: Doomsday' over the last 7 days. "
+                       "Measures active research interest. No API key needed — free Wikimedia REST API. "
+                       "≥14,000/week = strong (+2pts). <3,000/week = soft (−1pt).")
+        w2.metric("Week-over-week",
+                  f"{_av_wiki_wow:+.0f}%" if _av_wiki_wow is not None else "—",
+                  delta="↑ growing" if (_av_wiki_wow or 0) > 10 else "↓ cooling" if (_av_wiki_wow or 0) < -10 else "stable",
+                  help="Change in Wikipedia pageviews vs the prior 7-day period. "
+                       "Momentum signal: +50%+ = surging (+1pt). −30%+ drop = fading (−1pt).")
 
         if len(teasers) >= 2 and teasers[0] > 0:
             decay_signal = cal.get("teaser_decay_signal", "neutral")
@@ -853,54 +944,52 @@ with tab3:
             st.info("No trailer released. WB following Part Two marketing cadence — strategic delay.")
 
         _dune_m1, _dune_m2 = st.columns(2)
-        _dune_m2.metric("Alamo poll", "#1 Most Anticipated", delta="14,000 respondents")
-        if _trends_live:
-            _dune_m1.metric("Trends interest",
-                            f"{dune_sig.get('trends_interest', '—')}/100",
-                            delta=f"vs Avengers {av_sig.get('trends_interest', '?')}/100")
-        else:
-            _dune_m1.empty()
+        _dune_m2.metric("Alamo poll", "#1 Most Anticipated", delta="14,000 respondents",
+                        help="Alamo Drafthouse most-anticipated films survey. Dune ranked #1 among "
+                             "14,000 respondents — a strong signal of art-house and cinephile demand, "
+                             "the core audience that drives Dune's unusually high audience scores.")
 
-        if _reddit_live and (dune_sig.get("reddit_hot_avg") is not None or dune_sig.get("reddit_posts_24h") is not None):
-            r1, r2 = st.columns(2)
-            r1.metric("r/dune hot avg",
-                      f"{dune_sig['reddit_hot_avg']:,.0f}" if dune_sig.get("reddit_hot_avg") is not None else "—",
-                      delta="Upvote velocity")
-            r2.metric("r/dune posts/24h",
-                      str(dune_sig["reddit_posts_24h"]) if dune_sig.get("reddit_posts_24h") is not None else "—",
-                      delta="Post volume")
+        # Wikipedia pageviews
+        _dune_wiki_7d  = dune_sig.get("wiki_views_7d")
+        _dune_wiki_wow = dune_sig.get("wiki_wow_pct")
+        _dune_m1.metric("Wikipedia views (7d)",
+                        f"{_dune_wiki_7d:,}" if _dune_wiki_7d else "—",
+                        delta="Research interest",
+                        help="Wikipedia pageviews for 'Dune: Part Three' over the last 7 days. "
+                             "Dune has a smaller but highly engaged fanbase — lower absolute thresholds apply. "
+                             "≥7,000/week = strong (+2pts). <1,500/week = soft (−1pt).")
+        w3, w4 = st.columns(2)
+        w3.metric("Week-over-week",
+                  f"{_dune_wiki_wow:+.0f}%" if _dune_wiki_wow is not None else "—",
+                  delta="↑ growing" if (_dune_wiki_wow or 0) > 10 else "↓ cooling" if (_dune_wiki_wow or 0) < -10 else "stable",
+                  help="Change in Dune: Part Three Wikipedia pageviews vs prior 7-day period. "
+                       "Momentum signal: sustained growth = organic interest compounding. "
+                       "Drop = marketing needs to re-engage the fanbase.")
 
-        if _trends_live:
-            av_t   = av_sig.get("trends_interest", 72)
-            dune_t = dune_sig.get("trends_interest", 13)
-            total_t = av_t + dune_t or 1
-            fig_ratio = go.Figure()
-            fig_ratio.add_trace(go.Bar(
-                x=["Search Interest Share"],
-                y=[av_t / total_t * 100],
+        # Wikipedia comparison chart
+        if _av_wiki_7d and _dune_wiki_7d:
+            fig_wiki = go.Figure()
+            fig_wiki.add_trace(go.Bar(
+                x=["Wikipedia Research Interest (7d)"],
+                y=[_av_wiki_7d],
                 name="Avengers", marker_color=P["av"],
-                text=[f"Avengers {av_t / total_t * 100:.0f}%"],
-                textposition="inside",
-                textfont=dict(size=10, color="white"),
+                text=[f"Av {_av_wiki_7d:,}"],
+                textposition="inside", textfont=dict(size=10, color="white"),
+                hovertemplate="Avengers Wikipedia (7d): <b>%{y:,} views</b>"
+                              "<extra></extra>",
             ))
-            fig_ratio.add_trace(go.Bar(
-                x=["Search Interest Share"],
-                y=[dune_t / total_t * 100],
+            fig_wiki.add_trace(go.Bar(
+                x=["Wikipedia Research Interest (7d)"],
+                y=[_dune_wiki_7d],
                 name="Dune", marker_color=P["dune"],
-                text=[f"Dune {dune_t / total_t * 100:.0f}%"],
-                textposition="inside",
-                textfont=dict(size=10, color=P["bg"]),
+                text=[f"Dune {_dune_wiki_7d:,}"],
+                textposition="inside", textfont=dict(size=10, color=P["bg"]),
+                hovertemplate="Dune Wikipedia (7d): <b>%{y:,} views</b>"
+                              "<extra></extra>",
             ))
-            fig_ratio.add_hline(
-                y=18, line_dash="dot", line_width=0.8,
-                line_color=P["dune"], opacity=0.7,
-                annotation_text="Expected Dune baseline (no trailer)",
-                annotation_font_color=P["dune"], annotation_font_size=9,
-            )
-            fig_ratio.update_layout(**_layout(P, barmode="stack", height=260, yaxis_title="%"))
-            st.plotly_chart(fig_ratio, use_container_width=True)
-            st.caption("Dune's 13/100 vs Avengers 72/100 is marketing stage, not demand. "
-                       "Dune has released zero promotional materials.")
+            fig_wiki.update_layout(**_layout(P, barmode="group", height=240, yaxis_title="Pageviews"))
+            st.plotly_chart(fig_wiki, use_container_width=True)
+            st.caption("Wikipedia pageviews = active research interest. No API key needed. Updates daily.")
 
     # ── YouTube per-video stats table ─────────────────────────────────────────
     if yt_live:
@@ -964,9 +1053,9 @@ with tab3:
             x=wk_labels, y=[v * 100 for v in bvals],
             name=bname,
             mode="lines",
-            line=dict(dash=sty["dash"], color=sty["color"],
-                      width=1.2),
+            line=dict(dash=sty["dash"], color=sty["color"], width=1.2),
             opacity=sty["opacity"],
+            hovertemplate=f"<b>{bname}</b><br>%{{x}}: %{{y:.0f}}% of OW<extra></extra>",
         ))
 
     # Projected curve — prominent
@@ -976,6 +1065,12 @@ with tab3:
         mode="lines+markers",
         line=dict(color=P["av"], width=2.5),
         marker=dict(size=6, color=P["av"]),
+        hovertemplate=(
+            f"<b>Projected (audience {av_aud})</b><br>"
+            "%{x}: <b>%{y:.0f}%</b> of OW gross<br>"
+            f"WOM multiplier: {wm_proj:.2f}×"
+            "<extra></extra>"
+        ),
     ))
 
     # Annotate each projected point
@@ -1033,24 +1128,36 @@ with tab3:
         "Trailer status",
         "Released" if _spidey_sig_tab.get("full_trailer_released") else "Not released",
         delta=_spidey_sig_tab.get("trailer_date", ""),
+        help="Spider-Man: Brand New Day trailer release status. Once released, "
+             "YouTube view count and like/view ratio are pulled automatically "
+             "to suggest an impact tier for the sidebar slider.",
     )
     _sc2.metric(
         "YouTube views",
         f"{_spidey_views_M_tab:.0f}M" if _spidey_views_M_tab else "—",
         delta="Accumulating" if _spidey_fresh and _spidey_views_M_tab else
               "Set spiderman_full video ID" if not _spidey_views_M_tab else "Live",
+        help="24-hour YouTube view count for the Spider-Man: BND trailer. "
+             "Benchmarks: NWH T1 355M (Blockbuster), FFH T1 135M (Neutral), "
+             "Homecoming T1 64M (Soft). Set YOUTUBE_VIDEO_IDS['spiderman_full'] to enable.",
     )
     _sc3.metric(
         "Like/view ratio",
         f"{_spidey_ratio_tab * 100:.1f}%" if _spidey_ratio_tab else "—",
         delta=f"{_spidey_likes_tab:,} likes" if _spidey_likes_tab else
               "Day-1 signal — time-independent",
+        help="Like/view ratio is time-independent and works from minute one — "
+             "unlike raw view counts which require 24h to compare. "
+             "≥4.5% = Blockbuster, ≥3.3% = Strong, ≥2.2% = Neutral, ≥1.3% = Soft.",
     )
     _sc4.metric(
         "Suggested impact tier",
         _spidey_tier_tab or "—",
         delta="Via engagement ratio" if _spidey_fresh and _spidey_tier_tab else
               "Via 24h view count" if _spidey_tier_tab else "MCU brand signal → Avengers score",
+        help="Auto-suggested tier for the sidebar Spider-Man slider based on trailer data. "
+             "Each tier maps to an Avengers audience score adjustment and OW gross multiplier. "
+             "Override manually in the sidebar if you disagree with the auto-suggestion.",
     )
     if _spidey_tier_tab:
         _ratio_pct = f"{_spidey_ratio_tab * 100:.1f}%" if _spidey_ratio_tab else "—"
@@ -1096,19 +1203,16 @@ with tab3:
         yt_row_status = ("⚠ Key needed" if yt_stats.get("status") == "no_key"
                          else f"⚠ {yt_stats.get('status','unavailable')}")
 
-    # Build trends / reddit rows only when those sources are active
-    _av_t   = av_sig.get("trends_interest", 0)
-    _dune_t = dune_sig.get("trends_interest", 0)
-    _trends_row = ["Google Trends", "Search interest ratio",
-                   f"Av {_av_t} / Dune {_dune_t}" if _trends_live else "—",
-                   f"Av {cal['avengers_adj']:+.1f}pt / Dune {cal['dune_adj']:+.1f}pt",
-                   "✓ Live" if _trends_live else "⚠ Not configured"]
-    _reddit_row = ["Reddit API", "Post volume + upvote velocity",
-                   f"r/marvelstudios {av_sig.get('reddit_hot_avg') or '—'} avg / "
-                   f"r/dune {dune_sig.get('reddit_hot_avg') or '—'} avg"
-                   if _reddit_live else "—",
-                   "±3 pts max (score avg + post volume)",
-                   "✓ Live" if _reddit_live else "⚠ Not configured"]
+    # Build Wikipedia row
+    _wiki_live = "Wikipedia" in cal.get("sources", [])
+    _wiki_av   = av_sig.get("wiki_views_7d")
+    _wiki_dune = dune_sig.get("wiki_views_7d")
+    _wiki_row  = [
+        "Wikipedia pageviews", "Research interest (7d views)",
+        f"Av {_wiki_av:,} / Dune {_wiki_dune:,}" if (_wiki_av and _wiki_dune) else "—",
+        "±3 pts (volume + WoW momentum)",
+        "✓ Live" if _wiki_live else "⚠ Unavailable",
+    ]
 
     # Spider-Man trailer signal row
     _spidey_sig     = signals.get("spiderman", {})
@@ -1124,7 +1228,6 @@ with tab3:
     ]
 
     rows_sig = [
-        _trends_row,
         ["Teaser decay", "T1→T2 view retention",
          f"{teasers[0]:.0f}M → {teasers[1]:.0f}M ({teasers[1]/teasers[0]*100:.0f}%)"
          if len(teasers) >= 2 and teasers[0] > 0 else "—",
@@ -1132,10 +1235,8 @@ with tab3:
          f"✓ {teaser_src}"],
         ["YouTube API", "Official trailer views", yt_row_val,
          "Feeds teaser decay + audience score calibration", yt_row_status],
-        _reddit_row,
+        _wiki_row,
         _spidey_row,
-        ["Fandango presales", "Purchase intent", "Not open yet",
-         "Opens Sept 2026", "⏳ Pending"],
     ]
     st.dataframe(
         pd.DataFrame(rows_sig, columns=["Source", "Signal", "Current Value", "Model Impact", "Status"]),
@@ -1175,6 +1276,7 @@ with tab4:
             x=profits, nbinsx=60, name=name,
             marker_color=color, opacity=0.55,
             histnorm="probability density",
+            hovertemplate=f"<b>{name}</b><br>Net profit range: $%{{x:.0f}}M<br>Density: %{{y:.4f}}<extra></extra>",
         ))
         p50 = float(np.median(profits))
         fig4.add_vline(
@@ -1218,12 +1320,172 @@ with tab5:
 
     c1, c2, c3 = st.columns(3)
     c1.metric("Hold Dec 18 P50", f"${sc_a_av:.0f}M",
-              delta=f"{results['A_Both_Hold']['AVENGERS']['breakeven_pct']:.0f}% BE")
+              delta=f"{results['A_Both_Hold']['AVENGERS']['breakeven_pct']:.0f}% BE",
+              help="Avengers median net profit if Disney holds Dec 18 and absorbs the 21-day IMAX lockout. "
+                   "P50 of 5,000 MC trials. Avengers gets zero IMAX revenue for its entire opening weekend.")
     c2.metric("Move to May P50", f"${sc_b_av:.0f}M",
-              delta=f"+${sc_b_av - sc_a_av:.0f}M vs holding")
+              delta=f"+${sc_b_av - sc_a_av:.0f}M vs holding",
+              help="Avengers median net profit if Disney moves to May 1 (uncontested summer). "
+                   "Gets full 400-screen IMAX exclusive. Loses Christmas premium but gains legs. "
+                   f"Uplift vs holding: +${sc_b_av - sc_a_av:.0f}M at P50.")
     c3.metric("Move to Jan P50", f"${sc_c_av:.0f}M",
               delta=f"+${sc_c_av - sc_a_av:.0f}M vs holding",
-              delta_color="normal" if sc_c_av > sc_a_av else "inverse")
+              delta_color="normal" if sc_c_av > sc_a_av else "inverse",
+              help="Avengers median net profit if Disney moves to Jan 16 (after Dune's exclusive expires). "
+                   "Gets ~200 IMAX screens from day 1 but misses Christmas. Partial compromise scenario.")
+
+    # ── Polymarket integration explainer ──────────────────────────────────────
+    st.divider()
+    st.markdown(
+        f"<p style='font-size:0.58rem; letter-spacing:2px; color:{P['dim']}; margin-bottom:10px;'>"
+        "POLYMARKET SIGNAL</p>",
+        unsafe_allow_html=True,
+    )
+
+    _pm_src_label = "LIVE" if _poly_source == "live" else "FALLBACK (2026-03-18)"
+    _pm_src_color = P["dune"] if _poly_source == "live" else P["dim"]
+    _rec_color = {
+        "move":      P["av"],
+        "lean_move": "#d48020",
+        "neutral":   P["mid_ref"],
+        "hold":      P["dune"],
+    }.get(_poly_weights["recommendation"], P["mid_ref"])
+
+    pm_c1, pm_c2, pm_c3, pm_c4 = st.columns(4)
+    pm_c1.metric(
+        "Avengers Best OW",
+        f"{_poly_ow_odds:.0%}" if _poly_ow_odds else "—",
+        delta=f"OW scalar {_poly_ow_odds and (1.05 if _poly_ow_odds >= 0.70 else 1.00 if _poly_ow_odds >= 0.50 else 0.90 if _poly_ow_odds >= 0.30 else 0.80):.2f}x in MC",
+        help="Polymarket: probability Avengers has the best domestic opening weekend of 2026. "
+             "This is a direct crowd signal on opening-weekend demand. "
+             "Maps to an OW gross multiplier in the Monte Carlo: ≥70% → 1.05×, <30% → 0.80×.",
+    )
+    pm_c2.metric(
+        "Avengers Best Full Year",
+        f"{_poly_fy_odds:.0%}" if _poly_fy_odds else "—",
+        delta="Calendar-year domestic",
+        help="Polymarket: probability Avengers is the highest-grossing film of 2026 (calendar year). "
+             "Note: measures Jan 1 – Dec 31 domestic only. Avengers opens Dec 18 — "
+             "Spider-Man opens Jul 25 and has 5× more calendar-year accumulation time. "
+             "The low odds partly reflect timing, not just legs quality.",
+    )
+    pm_c3.metric(
+        "OW / Full-Year Ratio",
+        f"{_poly_ratio:.1f}x" if _poly_ratio else "—",
+        delta="Legs collapse signal",
+        delta_color="inverse" if (_poly_ratio or 0) >= 3.0 else "off",
+        help="OW odds ÷ full-year odds. A high ratio means the crowd thinks Avengers opens "
+             "huge but underperforms over its full run — the IMAX legs collapse in one number. "
+             "≥3.0× → STRONG move signal. 2.0–3.0× → moderate concern. <1.3× → market comfortable.",
+    )
+    pm_c4.metric(
+        "Move Signal",
+        (_poly_weights["recommendation"].replace("_", " ").upper()),
+        delta=_pm_src_label,
+        help="Disney move recommendation derived from the OW/FY ratio. "
+             "'MOVE' = ratio ≥3.0×, market strongly prices in a legs collapse. "
+             "'LEAN MOVE' = 2.0–3.0×. 'NEUTRAL' = 1.3–2.0×. 'HOLD' = <1.3×. "
+             f"Current: {_poly_weights['label']}",
+    )
+
+    # Weighted expected P50
+    _weighted_p50 = sum(
+        _poly_weights["weights"].get(sk, 0) * results[sk]["AVENGERS"]["p50"]
+        for sk in results
+    )
+    _sc_a_p50 = results["A_Both_Hold"]["AVENGERS"]["p50"]
+    _sc_b_p50 = results["B_Disney_May"]["AVENGERS"]["p50"]
+
+    with st.expander("How Polymarket feeds into this model", expanded=False):
+        st.markdown(f"""
+<div style='font-size:0.82rem; line-height:1.85; color:{P["text"]};'>
+
+**What Polymarket is**
+
+Polymarket is a prediction market where traders put real money on outcomes.
+Prices are probabilities set by the crowd — not polls, not analysts.
+With $1.1M+ traded on these two markets, the signal carries meaningful weight.
+
+**The two markets**
+
+| Market | Avengers odds | What it measures |
+|---|---|---|
+| Best opening weekend in 2026 | **{_poly_ow_odds:.0%}** | Pure opening-weekend demand |
+| Highest full-year gross in 2026 | **{_poly_fy_odds:.0%}** | Full domestic run (calendar year) |
+
+**Why the gap matters**
+
+The OW/FY ratio is **{_poly_ratio:.1f}x**. Avengers is the heavy favorite to open
+biggest, but the crowd gives it only {_poly_fy_odds:.0%} to dominate the full year.
+That gap is the market pricing in the IMAX conflict: Avengers loses 400 IMAX
+screens for 21 days, while Dune banks Christmas on all of them.
+
+**The calendar caveat**
+
+The full-year market measures *2026 calendar-year domestic gross*. Avengers
+opens Dec 18 — it only has ~2 weeks of 2026 to accumulate. Spider-Man opens
+July 25 and has ~5 months. So part of the ratio is just the opening-date math,
+not a pure legs signal. The ratio overstates the legs problem slightly, but the
+*direction* is correct.
+
+**How it enters the Monte Carlo**
+
+*Option A — OW scalar on opening weekend gross:*
+The OW odds ({_poly_ow_odds:.0%}) map to a **{_poly_ow_odds and (1.05 if _poly_ow_odds >= 0.70 else 1.00 if _poly_ow_odds >= 0.50 else 0.90 if _poly_ow_odds >= 0.30 else 0.80):.2f}x multiplier** applied to Avengers' mean
+opening-weekend gross in every trial. At 75% the crowd confirms a blockbuster
+opening — the model gets a +5% OW nudge. If odds fell to 40%, the model would
+apply a −10% OW penalty. This is the crowd acting as a real-money sentiment
+check on the $240M base assumption.
+
+*Option B — Scenario weights:*
+The OW/FY ratio ({_poly_ratio:.1f}x) maps to how much financial merit each scenario
+has, weighted by what the market is implicitly pricing. At {_poly_ratio:.1f}x:
+
+| Scenario | Weight | Avengers P50 |
+|---|---|---|
+| A: Both Hold | {_poly_weights["weights"]["A_Both_Hold"]:.0%} | ${results["A_Both_Hold"]["AVENGERS"]["p50"]:.0f}M |
+| B: Disney → May | {_poly_weights["weights"]["B_Disney_May"]:.0%} | ${results["B_Disney_May"]["AVENGERS"]["p50"]:.0f}M |
+| C: Disney → Jan | {_poly_weights["weights"]["C_Disney_Jan"]:.0%} | ${results["C_Disney_Jan"]["AVENGERS"]["p50"]:.0f}M |
+
+**Polymarket-weighted expected P50: ${_weighted_p50:.0f}M** vs ${_sc_a_p50:.0f}M if Disney holds.
+That's a **${_weighted_p50 - _sc_a_p50:+.0f}M** signal in favor of moving.
+
+</div>
+""", unsafe_allow_html=True)
+
+    # Scenario weights bar
+    _weight_df = pd.DataFrame({
+        "Scenario": [SCENARIOS[sk]["label"] for sk in ["A_Both_Hold", "B_Disney_May", "C_Disney_Jan"]],
+        "Weight":   [round(_poly_weights["weights"][sk] * 100) for sk in ["A_Both_Hold", "B_Disney_May", "C_Disney_Jan"]],
+        "Avengers P50 ($M)": [round(results[sk]["AVENGERS"]["p50"]) for sk in ["A_Both_Hold", "B_Disney_May", "C_Disney_Jan"]],
+    })
+    _wt_colors = [P["av"], P["dune"], P["cyan"]]
+    fig_pm = go.Figure(go.Bar(
+        x=_weight_df["Scenario"],
+        y=_weight_df["Weight"],
+        marker_color=_wt_colors,
+        text=[f'{w}%' for w in _weight_df["Weight"]],
+        textposition="outside",
+        textfont=dict(size=11, color=P["chart_font"]),
+        customdata=_weight_df["Avengers P50 ($M)"],
+        hovertemplate=(
+            "<b>%{x}</b><br>"
+            "Polymarket weight: <b>%{y}%</b><br>"
+            "Avengers P50: <b>$%{customdata}M</b><br>"
+            "Contribution to weighted P50: $%{customdata:.0f}M × %{y}%"
+            "<extra></extra>"
+        ),
+    ))
+    fig_pm.add_annotation(
+        text=f"Polymarket-weighted P50: <b>${_weighted_p50:.0f}M</b>",
+        xref="paper", yref="paper", x=0.5, y=1.08,
+        showarrow=False, font=dict(size=11, color=P["text"]),
+        align="center",
+    )
+    fig_pm.update_layout(**_layout(P, outside_text=True, height=280,
+                                    yaxis_title="Scenario weight (%)",
+                                    yaxis_range=[0, 80]))
+    st.plotly_chart(fig_pm, use_container_width=True)
 
     st.divider()
     prob_data = {
@@ -1338,8 +1600,8 @@ with tab6:
             <b style='color:{P['dune']}'>Strategic silence.</b><br><br>
             WB following the Part Two marketing cadence — first trailer
             expected closer to the Dec 18 release window.<br><br>
-            Dune's low Google Trends score (13/100 vs Avengers 72/100)
-            reflects zero promotional material released, not audience demand.
+            Dune's lower Wikipedia search interest reflects zero promotional
+            material released to date, not audience demand.
             </div>
             """,
             unsafe_allow_html=True,

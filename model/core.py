@@ -19,6 +19,87 @@ from model.config import (
 )
 
 
+# ── POLYMARKET HELPERS ────────────────────────────────────────────────────────
+
+def polymarket_ow_scalar(ow_odds: float) -> float:
+    """
+    Map Polymarket opening-weekend-winner odds to an OW gross multiplier.
+
+    The OW market asks: "Will Avengers have the best domestic opening weekend
+    in 2026?" The crowd price is a direct signal of conviction about the
+    size of Avengers' opening relative to all 2026 competition.
+
+    Mapping:
+      ≥ 70%  → 1.05x  (dominant opener confirmed)
+      50–70% → 1.00x  (neutral — in line with base assumption)
+      30–50% → 0.90x  (contested — soft opening risk)
+      < 30%  → 0.80x  (market pricing in significant underperformance)
+    """
+    if ow_odds is None:
+        return 1.0
+    if ow_odds >= 0.70:   return 1.05
+    elif ow_odds >= 0.50: return 1.00
+    elif ow_odds >= 0.30: return 0.90
+    else:                 return 0.80
+
+
+def polymarket_scenario_weights(ow_decay_ratio: float) -> dict:
+    """
+    Map the Polymarket OW/FY ratio to scenario probability weights and a
+    move recommendation for Disney.
+
+    The OW/FY ratio = P(Avengers best OW) / P(Avengers best full-year gross).
+    A high ratio means the crowd thinks Avengers opens huge but then
+    underperforms relative to its opening — the legs collapse the model
+    predicts from losing IMAX for 21 days.
+
+    IMPORTANT CAVEAT: the full-year market measures 2026 calendar-year
+    domestic gross. Avengers opens Dec 18 — ~2 weeks of 2026 run, vs
+    Spider-Man's ~5 months. Part of the ratio reflects the calendar cutoff,
+    not just legs quality. The signal is directionally correct but overstates
+    the legs problem slightly.
+
+    Weights represent: given this ratio, how should Disney weight the
+    financial merit of each scenario?
+
+    Returns:
+      weights          — dict mapping scenario key → 0–1 probability weight
+      recommendation   — "move" | "lean_move" | "neutral" | "hold"
+      label            — human-readable summary
+      weighted_p50_fn  — callable(results_dict) → float weighted expected P50
+    """
+    if ow_decay_ratio is None:
+        return {
+            "weights":        {k: 0.25 for k in ["A_Both_Hold", "B_Disney_May",
+                                                   "C_Disney_Jan", "D_WB_Moves"]},
+            "recommendation": "neutral",
+            "label":          "Insufficient Polymarket data — equal scenario weights",
+        }
+
+    if ow_decay_ratio >= 3.0:
+        weights = {"A_Both_Hold": 0.10, "B_Disney_May": 0.55,
+                   "C_Disney_Jan": 0.35, "D_WB_Moves": 0.00}
+        rec   = "move"
+        label = f"Ratio {ow_decay_ratio:.1f}x — market prices a major legs collapse. Move strongly favored."
+    elif ow_decay_ratio >= 2.0:
+        weights = {"A_Both_Hold": 0.25, "B_Disney_May": 0.45,
+                   "C_Disney_Jan": 0.30, "D_WB_Moves": 0.00}
+        rec   = "lean_move"
+        label = f"Ratio {ow_decay_ratio:.1f}x — moderate legs concern. Move leans favorable."
+    elif ow_decay_ratio >= 1.3:
+        weights = {"A_Both_Hold": 0.50, "B_Disney_May": 0.30,
+                   "C_Disney_Jan": 0.20, "D_WB_Moves": 0.00}
+        rec   = "neutral"
+        label = f"Ratio {ow_decay_ratio:.1f}x — mild legs concern. Hold or move roughly balanced."
+    else:
+        weights = {"A_Both_Hold": 0.70, "B_Disney_May": 0.20,
+                   "C_Disney_Jan": 0.10, "D_WB_Moves": 0.00}
+        rec   = "hold"
+        label = f"Ratio {ow_decay_ratio:.1f}x — market comfortable with legs. Hold favored."
+
+    return {"weights": weights, "recommendation": rec, "label": label}
+
+
 # ── THEATER OPERATIONS ────────────────────────────────────────────────────────
 
 def shows_per_day(film: str, fmt: str) -> int:
@@ -137,6 +218,7 @@ def run_monte_carlo(
     intl_override: float = None,
     imax_cfg: dict = None,
     spidey_tier: str = "Neutral",
+    polymarket_ow_odds: float = None,
 ) -> dict:
     """
     Monte Carlo simulation for a single film in a single scenario.
@@ -152,6 +234,7 @@ def run_monte_carlo(
     ow_adj    = SCENARIO_OW_ADJ.get((film, scenario_key), 1.0)
     if film == "AVENGERS":
         ow_adj *= SPIDEY_OW_MULT.get(spidey_tier, 1.0)
+        ow_adj *= polymarket_ow_scalar(polymarket_ow_odds)
 
     revenues  = []
     imax_revs = []
@@ -251,6 +334,7 @@ def run_all_scenarios(
     dune_intl: float = None,
     av_intl: float = None,
     spidey_tier: str = "Neutral",
+    polymarket_ow_odds: float = None,
 ) -> dict:
     results = {}
     for sk, sc in SCENARIOS.items():
@@ -267,5 +351,6 @@ def run_all_scenarios(
                 intl_override=intl,
                 imax_cfg=sc["imax_cfg"],
                 spidey_tier=spidey_tier,
+                polymarket_ow_odds=polymarket_ow_odds,
             )
     return results

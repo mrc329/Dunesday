@@ -1,18 +1,21 @@
 """
 model/signals.py
 
-Live signal fetching — Google Trends + YouTube Data API + Reddit API.
+Live signal fetching — YouTube Data API + Wikipedia + TMDB + Trakt.
 Called on every Streamlit page load. Fails gracefully to last
 known values if network is unavailable.
 
-GOOGLE TRENDS: No API key needed. Runs immediately.
 YOUTUBE API:   Set YOUTUBE_API_KEY in Streamlit secrets or .env.
                Returns None gracefully until key is configured.
-REDDIT API:    Set REDDIT_CLIENT_ID and REDDIT_CLIENT_SECRET in
-               Streamlit secrets or .env. Free app registration at
-               reddit.com/prefs/apps (script type, ~5 min setup).
-               Pulls post volume + upvote velocity from r/marvelstudios
-               and r/dune. Returns None gracefully until configured.
+TMDB API:      Set TMDB_API_KEY in Streamlit secrets or .env.
+               Free key at themoviedb.org/settings/api (~2 min).
+               Pulls popularity score + vote count for both films.
+               Set TMDB_MOVIE_IDS below after looking up IDs at
+               themoviedb.org (search film title, copy ID from URL).
+TRAKT API:     Set TRAKT_CLIENT_ID in Streamlit secrets or .env.
+               Free app at trakt.tv/oauth/applications (script type,
+               no redirect URI needed, ~2 min). Pulls watchlist
+               collectors + watcher count — organic demand signal.
 """
 
 import os
@@ -38,23 +41,20 @@ FALLBACK_SIGNALS = {
     "last_updated":  "2026-02-26",
     "source":        "fallback",
     "avengers": {
-        "trends_interest":   72,    # Google Trends index 0-100 (US, 90d)
-        "trends_dune_ratio": 0.18,  # Dune / Avengers search ratio
         "yt_trailer_views":  None,  # YouTube view count (full trailer not out yet)
         "teaser_views_x_M":  [53.0, 25.0, 15.0, 9.0],  # T1-T4 on X
         "combined_views_B":  1.02,
         "full_trailer_out":  False,
-        "reddit_hot_avg":    None,  # avg score of top-25 hot posts in r/marvelstudios
-        "reddit_posts_24h":  None,  # new posts referencing the film in last 24h
+        "wiki_views_7d":     None,  # Wikipedia pageviews last 7 days
+        "wiki_wow_pct":      None,  # week-over-week % change
     },
     "dune": {
-        "trends_interest":   13,
         "yt_trailer_views":  None,
         "full_trailer_out":  False,
         "trailer_date":      "2026-03-18",
         "alamo_rank":        1,
-        "reddit_hot_avg":    None,  # avg score of top-25 hot posts in r/dune
-        "reddit_posts_24h":  None,
+        "wiki_views_7d":     None,
+        "wiki_wow_pct":      None,
     },
     "spiderman": {
         "full_trailer_released": True,
@@ -71,7 +71,7 @@ FALLBACK_SIGNALS = {
     }
 }
 
-# ── BENCHMARK DECAY CURVE (Deadpool & Wolverine — nostalgia spike held) ───────
+# ── BENCHMARK DECAY CURVE (Deadpool & Wolverine — nostalgia spike held) ──────
 # T1→T2 view ratio benchmarks:
 # D&W:           365M → 280M = −23%   (held well)
 # Love&Thunder:  200M → 95M  = −53%   (didn't hold)  ← Avengers matches this
@@ -82,14 +82,6 @@ DECAY_BENCHMARKS = {
     "soft":      0.47,   # Love & Thunder territory
     "collapsed": 0.30,
 }
-
-# ── REDDIT SUBREDDIT CONFIG ───────────────────────────────────────────────────
-# Signals: post volume (sustained interest) + hot post upvote avg (buzz intensity)
-REDDIT_SUBREDDITS = {
-    "avengers": "marvelstudios",   # ~1M subscribers
-    "dune":     "dune",            # ~400k subscribers
-}
-
 
 # ── AUDIENCE SCORE CALIBRATION ────────────────────────────────────────────────
 
@@ -118,33 +110,6 @@ def calibrate_from_teaser_decay(views_list: list) -> float:
     else:
         return -5.0    # collapsed — significant downgrade
 
-
-def calibrate_from_trends(av_interest: int, dune_interest: int) -> dict:
-    """
-    Convert Google Trends data into audience score adjustments.
-    Trends index is relative (0-100), so only the ratio matters.
-
-    Returns adjustments for both films.
-    """
-    total = av_interest + dune_interest
-    if total == 0:
-        return {"avengers": 0.0, "dune": 0.0}
-
-    av_share   = av_interest / total
-    dune_share = dune_interest / total
-
-    # Avengers baseline expectation at this stage: ~80% of search share
-    # (has 4 teasers, Dune has zero trailers)
-    av_expected  = 0.82
-    dune_expected = 0.18
-
-    av_adj   = (av_share   - av_expected)  * 20   # ±4 max
-    dune_adj = (dune_share - dune_expected) * 20
-
-    return {
-        "avengers": float(np.clip(av_adj,   -4, 4)),
-        "dune":     float(np.clip(dune_adj, -4, 4)),
-    }
 
 
 def calibrate_from_yt_views(views: int, film: str) -> float:
@@ -219,85 +184,6 @@ def calibrate_from_trailer_engagement(views: int, likes: int) -> str | None:
     elif ratio >= 0.013: return "Soft"
     else:                return "Disappoints"
 
-
-def calibrate_from_reddit(hot_score_avg: float, posts_24h: int, film: str) -> float:
-    """
-    Convert Reddit engagement metrics into audience score adjustment.
-
-    hot_score_avg : average score of top-25 hot posts in the film's subreddit
-    posts_24h     : number of new posts published in the last 24 hours
-    film          : "AVENGERS" or "DUNE"
-
-    Thresholds are scaled to each subreddit's typical baseline activity.
-    Returns: float adjustment to add to base audience score (−2 to +3)
-    """
-    if hot_score_avg is None and posts_24h is None:
-        return 0.0
-
-    if film == "AVENGERS":
-        # r/marvelstudios (~1M subs) — higher absolute scores expected
-        if hot_score_avg is not None:
-            if hot_score_avg >= 3000:   score_adj = +2.0   # viral, top-of-subreddit
-            elif hot_score_avg >= 1500: score_adj = +1.0   # elevated engagement
-            elif hot_score_avg >= 500:  score_adj =  0.0   # baseline
-            else:                       score_adj = -1.0   # quiet, interest waning
-        else:
-            score_adj = 0.0
-
-        if posts_24h is not None:
-            vol_adj = +1.0 if posts_24h >= 30 else (0.0 if posts_24h >= 15 else -1.0)
-        else:
-            vol_adj = 0.0
-
-    else:  # DUNE — r/dune (~400k subs), lower absolute scores expected
-        if hot_score_avg is not None:
-            if hot_score_avg >= 1500:   score_adj = +2.0
-            elif hot_score_avg >= 750:  score_adj = +1.0
-            elif hot_score_avg >= 250:  score_adj =  0.0
-            else:                       score_adj = -1.0
-        else:
-            score_adj = 0.0
-
-        if posts_24h is not None:
-            vol_adj = +1.0 if posts_24h >= 15 else (0.0 if posts_24h >= 7 else -1.0)
-        else:
-            vol_adj = 0.0
-
-    return float(np.clip(score_adj + vol_adj, -2, 3))
-
-
-# ── GOOGLE TRENDS FETCH ───────────────────────────────────────────────────────
-
-def fetch_google_trends() -> dict:
-    """
-    Fetch 90-day search interest for both films.
-    Returns dict with interest scores and week-over-week change.
-    Falls back to None on any error.
-    """
-    try:
-        from pytrends.request import TrendReq
-        pytrends = TrendReq(hl="en-US", tz=360, timeout=(10, 25))
-        pytrends.build_payload(
-            ["Avengers Doomsday", "Dune Part Three"],
-            timeframe="today 3-m",
-            geo="US",
-        )
-        df = pytrends.interest_over_time()
-        if df.empty:
-            return None
-
-        latest = df.iloc[-1]
-        prev   = df.iloc[-2] if len(df) > 1 else latest
-
-        return {
-            "avengers_now":  int(latest.get("Avengers Doomsday", 0)),
-            "dune_now":      int(latest.get("Dune Part Three", 0)),
-            "avengers_prev": int(prev.get("Avengers Doomsday", 0)),
-            "dune_prev":     int(prev.get("Dune Part Three", 0)),
-            "fetched_at":    datetime.datetime.utcnow().isoformat(),
-        }
-    except Exception as e:
-        return None
 
 
 # ── YOUTUBE API FETCH ─────────────────────────────────────────────────────────
@@ -385,89 +271,487 @@ def fetch_youtube_views(video_ids: list = None) -> dict:
         return {"status": "error", "message": str(e)}
 
 
-# ── REDDIT API FETCH ──────────────────────────────────────────────────────────
 
-def fetch_reddit_signals() -> dict:
+# ── WIKIPEDIA PAGEVIEWS FETCH ─────────────────────────────────────────────────
+
+# Wikipedia article titles for each film
+WIKIPEDIA_ARTICLES = {
+    "avengers": "Avengers:_Doomsday",
+    "dune":     "Dune:_Part_Three",
+}
+
+def fetch_wikipedia_pageviews(days: int = 30) -> dict:
     """
-    Fetch post volume and upvote velocity from r/marvelstudios and r/dune
-    using PRAW (Python Reddit API Wrapper). PRAW handles auth, token refresh,
-    and rate limiting automatically — no manual OAuth dance needed.
+    Fetch daily Wikipedia pageview counts for both films.
+    Uses the free Wikimedia REST API — no key, no registration, works from cloud.
 
-    To set up (free, ~5 min):
-    1. Go to https://www.reddit.com/prefs/apps
-    2. Click "create another app" → select type "script"
-    3. Name it (e.g. "dunesday"), set redirect URI to http://localhost:8080
-    4. Copy the client_id (under the app name) and the client_secret
-    5. Add to Streamlit secrets:
-         REDDIT_CLIENT_ID     = "your-client-id"
-         REDDIT_CLIENT_SECRET = "your-client-secret"
-
-    Returns dict with hot_score_avg and posts_24h per film on success,
-    or {"status": "no_key"} / {"status": "error"} on failure.
+    Returns total + last-7-day views and week-over-week % change per film.
     """
-    client_id     = None
-    client_secret = None
-
     try:
-        import streamlit as st
-        client_id     = st.secrets.get("REDDIT_CLIENT_ID")
-        client_secret = st.secrets.get("REDDIT_CLIENT_SECRET")
-    except Exception:
-        pass
+        import requests
 
-    if not client_id:
-        client_id     = os.environ.get("REDDIT_CLIENT_ID")
-        client_secret = os.environ.get("REDDIT_CLIENT_SECRET")
+        end   = datetime.date.today()
+        start = end - datetime.timedelta(days=days)
 
-    if not client_id or not client_secret:
-        return {
-            "status":  "no_key",
-            "message": "Add REDDIT_CLIENT_ID and REDDIT_CLIENT_SECRET to Streamlit secrets",
-        }
-
-    try:
-        import praw
-
-        reddit = praw.Reddit(
-            client_id=client_id,
-            client_secret=client_secret,
-            user_agent="dunesday/1.0 (box office research)",
-        )
-
-        cutoff  = datetime.datetime.utcnow().timestamp() - 86_400  # 24 hours ago
         results = {}
-
-        for film, subreddit_name in REDDIT_SUBREDDITS.items():
-            sub = reddit.subreddit(subreddit_name)
-
-            # Hot posts → upvote velocity (buzz intensity signal)
-            # Exclude stickied mod posts — they inflate the average artificially
-            scores = [
-                post.score for post in sub.hot(limit=25)
-                if not post.stickied
-            ]
-            hot_avg = float(np.mean(scores)) if scores else None
-
-            # New posts (last 24h) → post volume (sustained interest signal)
-            posts_24h = sum(
-                1 for post in sub.new(limit=100)
-                if post.created_utc >= cutoff
+        for film, article in WIKIPEDIA_ARTICLES.items():
+            url = (
+                f"https://wikimedia.org/api/rest_v1/metrics/pageviews/per-article"
+                f"/en.wikipedia/all-access/all-agents/{article}/daily"
+                f"/{start.strftime('%Y%m%d')}/{end.strftime('%Y%m%d')}"
             )
+            resp = requests.get(
+                url, timeout=10,
+                headers={"User-Agent": "dunesday/1.0 (box office research)"}
+            )
+            if resp.status_code != 200:
+                results[film] = None
+                continue
+
+            items = resp.json().get("items", [])
+            if not items:
+                results[film] = None
+                continue
+
+            views_by_day = [item["views"] for item in items]
+            total        = sum(views_by_day)
+            last_7       = sum(views_by_day[-7:])  if len(views_by_day) >= 7  else sum(views_by_day)
+            prev_7       = sum(views_by_day[-14:-7]) if len(views_by_day) >= 14 else None
+            wow_pct      = round((last_7 - prev_7) / prev_7 * 100, 1) if prev_7 else None
 
             results[film] = {
-                "subreddit":     subreddit_name,
-                "hot_score_avg": round(hot_avg, 1) if hot_avg is not None else None,
-                "posts_24h":     posts_24h,
+                "total_views":   total,
+                "last_7d_views": last_7,
+                "prev_7d_views": prev_7,
+                "wow_pct":       wow_pct,
+                "daily_avg":     round(total / len(views_by_day), 1),
             }
 
         return {
-            "status":     "ok",
-            "films":      results,
-            "fetched_at": datetime.datetime.utcnow().isoformat(),
+            "status":      "ok",
+            "films":       results,
+            "period_days": days,
+            "fetched_at":  datetime.datetime.utcnow().isoformat(),
         }
 
     except Exception as e:
         return {"status": "error", "message": str(e)}
+
+
+def calibrate_from_wikipedia(last_7d_views: int, wow_pct: float, film: str) -> float:
+
+    """
+    Convert Wikipedia pageview data into audience score adjustment.
+
+    last_7d_views : total pageviews over the last 7 days
+    wow_pct       : week-over-week % change (positive = growing interest)
+    film          : "AVENGERS" or "DUNE"
+
+    Thresholds scaled to each film's expected baseline at this stage (9 months out).
+    Returns: float adjustment (-3 to +3)
+    """
+    if last_7d_views is None:
+        return 0.0
+
+    # Base adjustment from absolute view level
+    if film == "AVENGERS":
+        # ~2k/day = strong, ~1k/day = normal, <500/day = soft
+        if last_7d_views >= 14000:  base_adj = +2.0
+        elif last_7d_views >= 7000: base_adj = +1.0
+        elif last_7d_views >= 3000: base_adj =  0.0
+        else:                       base_adj = -1.0
+    else:  # DUNE — smaller fanbase, lower baseline expected
+        if last_7d_views >= 7000:   base_adj = +2.0
+        elif last_7d_views >= 3500: base_adj = +1.0
+        elif last_7d_views >= 1500: base_adj =  0.0
+        else:                       base_adj = -1.0
+
+    # Momentum adjustment from week-over-week trend
+    if wow_pct is not None:
+        if wow_pct >= 50:    mom_adj = +1.0   # surging
+        elif wow_pct >= 10:  mom_adj = +0.5   # growing
+        elif wow_pct >= -10: mom_adj =  0.0   # stable
+        elif wow_pct >= -30: mom_adj = -0.5   # cooling
+        else:                mom_adj = -1.0   # fading fast
+    else:
+        mom_adj = 0.0
+
+    return float(np.clip(base_adj + mom_adj, -3, 3))
+
+
+# ── TMDB ──────────────────────────────────────────────────────────────────────
+
+# TMDB movie IDs — look up at themoviedb.org (search title, copy integer from URL)
+# e.g. themoviedb.org/movie/693134  →  ID is 693134
+TMDB_MOVIE_IDS = {
+    "avengers": None,   # TODO: set after looking up "Avengers: Doomsday" on TMDB
+    "dune":     None,   # TODO: set after looking up "Dune: Part Three" on TMDB
+}
+
+def fetch_tmdb_signals() -> dict:
+    """
+    Fetch TMDB popularity score + vote count for both films.
+    Requires TMDB_API_KEY in environment or Streamlit secrets.
+
+    TMDB popularity is a rolling composite of:
+      - Page views on TMDB
+      - Watchlist/favourite adds
+      - Vote activity
+    At 9 months out, a score > 200 indicates strong tentpole tracking.
+    """
+    api_key = None
+    try:
+        import streamlit as st
+        api_key = st.secrets.get("TMDB_API_KEY")
+    except Exception:
+        pass
+    if not api_key:
+        api_key = os.environ.get("TMDB_API_KEY")
+    if not api_key:
+        return {"status": "no_key", "message": "Add TMDB_API_KEY to Streamlit secrets"}
+
+    results = {}
+    try:
+        import requests
+        for film, movie_id in TMDB_MOVIE_IDS.items():
+            if movie_id is None:
+                results[film] = None
+                continue
+            url = f"https://api.themoviedb.org/3/movie/{movie_id}"
+            resp = requests.get(url, params={"api_key": api_key}, timeout=10)
+            if resp.status_code != 200:
+                results[film] = None
+                continue
+            data = resp.json()
+            results[film] = {
+                "popularity":   data.get("popularity"),
+                "vote_count":   data.get("vote_count"),
+                "vote_average": data.get("vote_average"),
+                "title":        data.get("title"),
+            }
+        return {"status": "ok", "films": results,
+                "fetched_at": datetime.datetime.utcnow().isoformat()}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
+def calibrate_from_tmdb(popularity: float, film: str) -> float:
+    """
+    Map TMDB popularity score to an audience score adjustment.
+
+    TMDB popularity benchmarks at ~9 months pre-release:
+      Endgame-level tentpole:  500+
+      Strong MCU/blockbuster:  200–500
+      Neutral:                 75–200
+      Soft tracking:           25–75
+      Low / MCU fatigue:       <25
+
+    Dune has a smaller but highly engaged fanbase — lower absolute
+    threshold still represents strong relative demand.
+    """
+    if popularity is None:
+        return 0.0
+
+    if film == "AVENGERS":
+        if popularity >= 500:   return +3.0
+        elif popularity >= 200: return +1.5
+        elif popularity >= 75:  return  0.0
+        elif popularity >= 25:  return -1.5
+        else:                   return -3.0
+    else:  # DUNE — smaller fandom, lower absolute baseline
+        if popularity >= 200:   return +3.0
+        elif popularity >= 75:  return +1.5
+        elif popularity >= 30:  return  0.0
+        elif popularity >= 10:  return -1.5
+        else:                   return -3.0
+
+
+# ── TRAKT ──────────────────────────────────────────────────────────────────────
+
+# Trakt slugs — usually lowercase-hyphenated title, verify at trakt.tv/movies/<slug>
+TRAKT_MOVIE_SLUGS = {
+    "avengers": "avengers-doomsday",
+    "dune":     "dune-part-three",
+}
+
+def fetch_trakt_signals() -> dict:
+    """
+    Fetch Trakt watchlist collectors + watcher count for both films.
+    Requires TRAKT_CLIENT_ID in environment or Streamlit secrets.
+
+    'collectors' = users who added to collection (high-intent, organic demand)
+    'watchers'   = users who have watched (pre-release: near-zero, ignore)
+    'lists'      = times added to curated lists (taste-graph signal)
+
+    At 9 months pre-release, collectors is the most meaningful metric.
+    A collector count growing week-over-week signals building organic demand.
+    """
+    client_id = None
+    try:
+        import streamlit as st
+        client_id = st.secrets.get("TRAKT_CLIENT_ID")
+    except Exception:
+        pass
+    if not client_id:
+        client_id = os.environ.get("TRAKT_CLIENT_ID")
+    if not client_id:
+        return {"status": "no_key", "message": "Add TRAKT_CLIENT_ID to Streamlit secrets"}
+
+    results = {}
+    try:
+        import requests
+        headers = {
+            "Content-Type":      "application/json",
+            "trakt-api-version": "2",
+            "trakt-api-key":     client_id,
+        }
+        for film, slug in TRAKT_MOVIE_SLUGS.items():
+            url = f"https://api.trakt.tv/movies/{slug}/stats"
+            resp = requests.get(url, headers=headers, timeout=10)
+            if resp.status_code != 200:
+                results[film] = None
+                continue
+            data = resp.json()
+            results[film] = {
+                "watchers":   data.get("watchers"),
+                "collectors": data.get("collectors"),
+                "lists":      data.get("lists"),
+                "comments":   data.get("comments"),
+            }
+        return {"status": "ok", "films": results,
+                "fetched_at": datetime.datetime.utcnow().isoformat()}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
+def calibrate_from_trakt(collectors: int, film: str) -> float:
+    """
+    Map Trakt collector count to an audience score adjustment.
+
+    'collectors' measures organic anticipation — users proactively
+    adding the film to track it, independent of marketing spend.
+    High collector counts at 9 months out predict strong opening weekends.
+
+    Benchmarks (comparable blockbusters at 9 months pre-release):
+      Endgame-level:  100k+ collectors
+      Strong:          40k–100k
+      Neutral:         15k–40k
+      Soft:             5k–15k
+      Low:             <5k
+    """
+    if collectors is None:
+        return 0.0
+
+    if film == "AVENGERS":
+        if collectors >= 100_000:  return +3.0
+        elif collectors >= 40_000: return +1.5
+        elif collectors >= 15_000: return  0.0
+        elif collectors >=  5_000: return -1.5
+        else:                      return -3.0
+    else:  # DUNE — smaller Trakt userbase overlap
+        if collectors >= 40_000:   return +3.0
+        elif collectors >= 15_000: return +1.5
+        elif collectors >=  5_000: return  0.0
+        elif collectors >=  1_500: return -1.5
+        else:                      return -3.0
+
+
+# ── POLYMARKET ────────────────────────────────────────────────────────────────
+# No API key needed — public prediction market data.
+# Two markets are tracked:
+#   "full_year"  — "Highest grossing movie in 2026?" (calendar year domestic)
+#   "ow"         — "Which movie has the biggest opening weekend in 2026?"
+#
+# Each event contains one Yes/No market per film.
+# The Yes price (0–1) is the crowd's implied probability.
+#
+# KEY INSIGHT: The gap between OW odds and full-year odds directly prices
+# the IMAX / legs damage from the Dec 18 conflict. Currently:
+#   Avengers OW: ~75%  Full-year: ~21%  → market expects a legs collapse
+# If Disney moved, the full-year odds would converge toward the OW odds.
+
+POLYMARKET_MARKET_SLUGS = {
+    # Individual Yes/No market slugs from polymarket.com event URLs
+    "avengers_ow":        "will-avengers-doomsday-have-the-best-domestic-opening-weekend-in-2026",
+    "avengers_full_year": "will-avengers-doomsday-be-the-top-grossing-movie-of-2026",
+    "dune_full_year":     "will-dune-part-three-be-the-top-grossing-movie-of-2026",
+}
+
+POLYMARKET_EVENT_SLUGS = {
+    "full_year": "highest-grossing-movie-in-2026",
+    "ow":        "which-movie-has-biggest-opening-weekend-in-2026",
+}
+
+# Hardcoded fallback odds (update manually when odds shift significantly)
+POLYMARKET_FALLBACK = {
+    "avengers_ow_odds":        0.75,   # 75% — best OW in 2026
+    "avengers_full_year_odds": 0.21,   # 21% — highest full-year gross in 2026
+    "dune_full_year_odds":     None,   # not in top markets yet
+    "last_updated":            "2026-03-18",
+}
+
+
+def fetch_polymarket_signals() -> dict:
+    """
+    Fetch live prediction market odds from Polymarket's public Gamma API.
+    No API key required.
+
+    Tries the event-level endpoint first (one call, all films), then falls
+    back to individual market slugs. Falls back to POLYMARKET_FALLBACK on
+    any network failure.
+
+    Returns dict with:
+      avengers_ow_odds        — P(Avengers has best OW in 2026)
+      avengers_full_year_odds — P(Avengers is top grossing film in 2026)
+      dune_full_year_odds     — P(Dune Part Three is top grossing film in 2026)
+      ow_decay_ratio          — avengers_ow_odds / avengers_full_year_odds
+                                (> 2.0 signals market expects a legs problem)
+    """
+    try:
+        import requests
+        headers = {
+            "User-Agent": "dunesday/1.0 (box office research; contact via github)",
+            "Accept":     "application/json",
+        }
+
+        result = {}
+
+        # ── Strategy 1: event-level fetch (gets all films in one call) ────────
+        for market_type, event_slug in POLYMARKET_EVENT_SLUGS.items():
+            url = f"https://gamma-api.polymarket.com/events?slug={event_slug}"
+            resp = requests.get(url, headers=headers, timeout=10)
+            if resp.status_code != 200:
+                continue
+            events = resp.json()
+            if not events:
+                continue
+            event = events[0] if isinstance(events, list) else events
+            for mkt in event.get("markets", []):
+                question   = (mkt.get("question") or mkt.get("groupItemTitle") or "").lower()
+                prices_raw = mkt.get("outcomePrices") or mkt.get("bestBid") or []
+                # outcomePrices is ["yes_price", "no_price"] as strings
+                if not prices_raw:
+                    continue
+                try:
+                    yes_price = float(prices_raw[0]) if isinstance(prices_raw, list) else None
+                except (ValueError, TypeError):
+                    yes_price = None
+                if yes_price is None:
+                    continue
+
+                if "avengers" in question or "doomsday" in question:
+                    if market_type == "ow":
+                        result["avengers_ow_odds"] = yes_price
+                    else:
+                        result["avengers_full_year_odds"] = yes_price
+                elif "dune" in question:
+                    if market_type == "full_year":
+                        result["dune_full_year_odds"] = yes_price
+
+        # ── Strategy 2: individual market slugs for anything still missing ────
+        needed = {
+            "avengers_ow_odds":        POLYMARKET_MARKET_SLUGS["avengers_ow"],
+            "avengers_full_year_odds": POLYMARKET_MARKET_SLUGS["avengers_full_year"],
+            "dune_full_year_odds":     POLYMARKET_MARKET_SLUGS["dune_full_year"],
+        }
+        for key, slug in needed.items():
+            if key in result:
+                continue
+            url  = f"https://gamma-api.polymarket.com/markets?slug={slug}"
+            resp = requests.get(url, headers=headers, timeout=10)
+            if resp.status_code != 200:
+                continue
+            mkts = resp.json()
+            mkt  = mkts[0] if isinstance(mkts, list) and mkts else mkts
+            prices_raw = mkt.get("outcomePrices") or []
+            try:
+                result[key] = float(prices_raw[0])
+            except (IndexError, ValueError, TypeError):
+                pass
+
+        if not result:
+            fb = dict(POLYMARKET_FALLBACK)
+            av_ow = fb.get("avengers_ow_odds")
+            av_fy = fb.get("avengers_full_year_odds")
+            if av_ow and av_fy and av_fy > 0:
+                fb["ow_decay_ratio"] = round(av_ow / av_fy, 2)
+            return {"status": "error", "message": "no data returned from Gamma API",
+                    **fb, "source": "fallback"}
+
+        # Compute the legs-damage ratio
+        av_ow  = result.get("avengers_ow_odds")
+        av_fy  = result.get("avengers_full_year_odds")
+        if av_ow and av_fy and av_fy > 0:
+            result["ow_decay_ratio"] = round(av_ow / av_fy, 2)
+
+        result["status"]     = "ok"
+        result["source"]     = "live"
+        result["fetched_at"] = datetime.datetime.utcnow().isoformat()
+        return result
+
+    except Exception as e:
+        fb = dict(POLYMARKET_FALLBACK)
+        av_ow = fb.get("avengers_ow_odds")
+        av_fy = fb.get("avengers_full_year_odds")
+        if av_ow and av_fy and av_fy > 0:
+            fb["ow_decay_ratio"] = round(av_ow / av_fy, 2)
+        return {"status": "error", "message": str(e), **fb, "source": "fallback"}
+
+
+def calibrate_from_polymarket(av_ow_odds: float, av_fy_odds: float) -> dict:
+    """
+    Derive audience score adjustments and a move-signal from Polymarket odds.
+
+    OW odds  → small Avengers audience score adjustment (crowd's OW conviction)
+    FY odds  → surfaces the legs problem; NOT fed into audience score directly
+               (IMAX damage is already modeled separately in core.py)
+    Ratio    → ow_decay_ratio > 2.5 is a strong "market expects legs collapse" signal
+
+    Returns:
+      av_score_adj  — float, added to Avengers audience score
+      move_signal   — "hold" | "neutral" | "move" | None
+      notes         — human-readable interpretation
+    """
+    av_score_adj = 0.0
+    move_signal  = None
+    notes        = []
+
+    if av_ow_odds is not None:
+        if av_ow_odds >= 0.65:
+            av_score_adj = +1.5
+            notes.append(f"Polymarket OW: {av_ow_odds:.0%} — market confirms Avengers as dominant opener.")
+        elif av_ow_odds >= 0.45:
+            av_score_adj = 0.0
+            notes.append(f"Polymarket OW: {av_ow_odds:.0%} — neutral OW signal.")
+        else:
+            av_score_adj = -2.0
+            notes.append(f"Polymarket OW: {av_ow_odds:.0%} — soft OW signal, MCU fatigue priced in.")
+
+    if av_ow_odds and av_fy_odds and av_fy_odds > 0:
+        ratio = av_ow_odds / av_fy_odds
+        if ratio >= 3.0:
+            move_signal = "move"
+            notes.append(
+                f"OW/FY ratio {ratio:.1f}x — market prices a major legs collapse. "
+                "Consistent with Dec 18 IMAX penalty. Move signal: STRONG."
+            )
+        elif ratio >= 2.0:
+            move_signal = "neutral"
+            notes.append(
+                f"OW/FY ratio {ratio:.1f}x — market expects underperformance relative to opening. "
+                "Moderate legs concern."
+            )
+        else:
+            move_signal = "hold"
+            notes.append(
+                f"OW/FY ratio {ratio:.1f}x — market expects legs to hold. Hold signal."
+            )
+
+    return {
+        "av_score_adj": av_score_adj,
+        "move_signal":  move_signal,
+        "notes":        " ".join(notes),
+    }
 
 
 # ── MASTER FETCH + CALIBRATE ──────────────────────────────────────────────────
@@ -483,29 +767,14 @@ def fetch_and_calibrate(base_dune_score: int = 87, base_av_score: int = 88) -> d
     dune_adj = 0.0
     sources_used = []
 
-    # ── 1. Google Trends ──────────────────────────────────────────────────────
-    trends = fetch_google_trends()
-    if trends:
-        signals["avengers"]["trends_interest"] = trends["avengers_now"]
-        signals["dune"]["trends_interest"]     = trends["dune_now"]
-        signals["last_updated"] = trends["fetched_at"][:10]
-        signals["source"] = "live"
-
-        trend_adj = calibrate_from_trends(trends["avengers_now"], trends["dune_now"])
-        av_adj   += trend_adj["avengers"]
-        dune_adj += trend_adj["dune"]
-        sources_used.append("Google Trends")
-    else:
-        sources_used.append("Google Trends (fallback)")
-
-    # ── 2. Teaser decay calibration ───────────────────────────────────────────
+    # ── 1. Teaser decay calibration ───────────────────────────────────────────
     av_decay_adj = calibrate_from_teaser_decay(
         signals["avengers"]["teaser_views_x_M"]
     )
     av_adj += av_decay_adj
     sources_used.append("Teaser decay curve")
 
-    # ── 3. YouTube API ────────────────────────────────────────────────────────
+    # ── 2. YouTube API ────────────────────────────────────────────────────────
     dune_t1_fresh = _is_fresh_trailer(signals.get("dune", {}).get("trailer_date"))
     yt = fetch_youtube_views()
     if yt.get("status") == "ok" and yt.get("videos"):
@@ -562,37 +831,95 @@ def fetch_and_calibrate(base_dune_score: int = 87, base_av_score: int = 88) -> d
         signals["_yt_status"] = yt.get("status", "unavailable")
         signals["_yt_message"] = yt.get("message", "")
 
-    # ── 4. Reddit API ─────────────────────────────────────────────────────────
-    reddit = fetch_reddit_signals()
-    if reddit.get("status") == "ok" and reddit.get("films"):
-        film_data   = reddit["films"]
-        av_reddit   = film_data.get("avengers", {})
-        dune_reddit = film_data.get("dune", {})
+    # ── 3. Wikipedia pageviews ────────────────────────────────────────────────
+    wiki = fetch_wikipedia_pageviews()
+    if wiki.get("status") == "ok" and wiki.get("films"):
+        av_wiki   = wiki["films"].get("avengers") or {}
+        dune_wiki = wiki["films"].get("dune") or {}
 
-        av_reddit_adj   = calibrate_from_reddit(
-            av_reddit.get("hot_score_avg"),
-            av_reddit.get("posts_24h"),
-            "AVENGERS",
+        av_wiki_adj   = calibrate_from_wikipedia(
+            av_wiki.get("last_7d_views"), av_wiki.get("wow_pct"), "AVENGERS"
         )
-        dune_reddit_adj = calibrate_from_reddit(
-            dune_reddit.get("hot_score_avg"),
-            dune_reddit.get("posts_24h"),
-            "DUNE",
+        dune_wiki_adj = calibrate_from_wikipedia(
+            dune_wiki.get("last_7d_views"), dune_wiki.get("wow_pct"), "DUNE"
         )
 
-        av_adj   += av_reddit_adj
-        dune_adj += dune_reddit_adj
-        sources_used.append("Reddit API")
+        av_adj   += av_wiki_adj
+        dune_adj += dune_wiki_adj
+        sources_used.append("Wikipedia")
 
-        signals["avengers"]["reddit_hot_avg"]   = av_reddit.get("hot_score_avg")
-        signals["avengers"]["reddit_posts_24h"] = av_reddit.get("posts_24h")
-        signals["dune"]["reddit_hot_avg"]       = dune_reddit.get("hot_score_avg")
-        signals["dune"]["reddit_posts_24h"]     = dune_reddit.get("posts_24h")
+        signals["avengers"]["wiki_views_7d"] = av_wiki.get("last_7d_views")
+        signals["avengers"]["wiki_wow_pct"]  = av_wiki.get("wow_pct")
+        signals["dune"]["wiki_views_7d"]     = dune_wiki.get("last_7d_views")
+        signals["dune"]["wiki_wow_pct"]      = dune_wiki.get("wow_pct")
     else:
-        signals["_reddit_status"]  = reddit.get("status", "unavailable")
-        signals["_reddit_message"] = reddit.get("message", "")
+        sources_used.append("Wikipedia (unavailable)")
 
-    # ── 5. Spider-Man: BND trailer calibration ────────────────────────────────
+    # ── 4. TMDB popularity ────────────────────────────────────────────────────
+    tmdb = fetch_tmdb_signals()
+    if tmdb.get("status") == "ok" and tmdb.get("films"):
+        av_tmdb   = tmdb["films"].get("avengers") or {}
+        dune_tmdb = tmdb["films"].get("dune") or {}
+
+        av_tmdb_adj   = calibrate_from_tmdb(av_tmdb.get("popularity"),   "AVENGERS")
+        dune_tmdb_adj = calibrate_from_tmdb(dune_tmdb.get("popularity"), "DUNE")
+
+        av_adj   += av_tmdb_adj
+        dune_adj += dune_tmdb_adj
+        sources_used.append("TMDB")
+
+        signals["avengers"]["tmdb_popularity"]   = av_tmdb.get("popularity")
+        signals["avengers"]["tmdb_vote_count"]   = av_tmdb.get("vote_count")
+        signals["dune"]["tmdb_popularity"]       = dune_tmdb.get("popularity")
+        signals["dune"]["tmdb_vote_count"]       = dune_tmdb.get("vote_count")
+    else:
+        signals["_tmdb_status"]  = tmdb.get("status", "unavailable")
+        signals["_tmdb_message"] = tmdb.get("message", "")
+
+    # ── 5. Trakt collectors ───────────────────────────────────────────────────
+    trakt = fetch_trakt_signals()
+    if trakt.get("status") == "ok" and trakt.get("films"):
+        av_trakt   = trakt["films"].get("avengers") or {}
+        dune_trakt = trakt["films"].get("dune") or {}
+
+        av_trakt_adj   = calibrate_from_trakt(av_trakt.get("collectors"),   "AVENGERS")
+        dune_trakt_adj = calibrate_from_trakt(dune_trakt.get("collectors"), "DUNE")
+
+        av_adj   += av_trakt_adj
+        dune_adj += dune_trakt_adj
+        sources_used.append("Trakt")
+
+        signals["avengers"]["trakt_collectors"] = av_trakt.get("collectors")
+        signals["avengers"]["trakt_watchers"]   = av_trakt.get("watchers")
+        signals["avengers"]["trakt_lists"]      = av_trakt.get("lists")
+        signals["dune"]["trakt_collectors"]     = dune_trakt.get("collectors")
+        signals["dune"]["trakt_watchers"]       = dune_trakt.get("watchers")
+        signals["dune"]["trakt_lists"]          = dune_trakt.get("lists")
+    else:
+        signals["_trakt_status"]  = trakt.get("status", "unavailable")
+        signals["_trakt_message"] = trakt.get("message", "")
+
+    # ── 6. Polymarket prediction market odds ──────────────────────────────────
+    poly = fetch_polymarket_signals()
+    poly_calib = calibrate_from_polymarket(
+        poly.get("avengers_ow_odds"),
+        poly.get("avengers_full_year_odds"),
+    )
+    av_adj += poly_calib["av_score_adj"]
+    sources_used.append("Polymarket" if poly.get("source") == "live" else "Polymarket (fallback)")
+
+    signals["polymarket"] = {
+        "avengers_ow_odds":        poly.get("avengers_ow_odds"),
+        "avengers_full_year_odds": poly.get("avengers_full_year_odds"),
+        "dune_full_year_odds":     poly.get("dune_full_year_odds"),
+        "ow_decay_ratio":          poly.get("ow_decay_ratio"),
+        "move_signal":             poly_calib["move_signal"],
+        "notes":                   poly_calib["notes"],
+        "source":                  poly.get("source", "fallback"),
+        "fetched_at":              poly.get("fetched_at"),
+    }
+
+    # ── 7. Spider-Man: BND trailer calibration ───────────────────────────────
     spidey_yt_id = YOUTUBE_VIDEO_IDS.get("spiderman_full")
     spidey_suggested_tier  = None
     spidey_trailer_fresh   = _is_fresh_trailer(signals.get("spiderman", {}).get("trailer_date"))
@@ -614,15 +941,23 @@ def fetch_and_calibrate(base_dune_score: int = 87, base_av_score: int = 88) -> d
         signals["spiderman"]["suggested_tier"] = spidey_suggested_tier
         sources_used.append("Spider-Man trailer (YouTube)")
 
-    # ── 6. Final calibrated scores ────────────────────────────────────────────
+    # ── 8. Final calibrated scores ────────────────────────────────────────────
     av_calibrated   = float(np.clip(base_av_score   + av_adj,   60, 100))
     dune_calibrated = float(np.clip(base_dune_score + dune_adj, 60, 100))
 
-    # Signal confidence — "high" requires all three live API sources
-    live_sources = {"YouTube API", "Google Trends", "Reddit API"}
-    if live_sources.issubset(set(sources_used)) \
-            and not any("fallback" in s for s in sources_used):
+    # Signal confidence:
+    #   high   — YouTube + Wikipedia + at least one of TMDB / Trakt
+    #   medium — YouTube + Wikipedia only (or partial)
+    #   low    — no live sources
+    sources_set = set(sources_used)
+    has_core      = {"YouTube API", "Wikipedia"}.issubset(sources_set)
+    has_secondary = bool(sources_set & {"TMDB", "Trakt", "Polymarket"})
+    no_fallback   = not any("fallback" in s for s in sources_used)
+
+    if has_core and has_secondary and no_fallback:
         confidence = "high"
+    elif has_core and no_fallback:
+        confidence = "medium"
     elif any(s for s in sources_used if "fallback" not in s):
         confidence = "medium"
     else:
@@ -641,13 +976,13 @@ def fetch_and_calibrate(base_dune_score: int = 87, base_av_score: int = 88) -> d
         "spidey_suggested_tier": spidey_suggested_tier,
         "spidey_trailer_fresh":  spidey_trailer_fresh,
         "dune_t1_fresh":         dune_t1_fresh,
-        "notes": _build_notes(av_adj, dune_adj, trends, yt, reddit, spidey_suggested_tier),
+        "notes": _build_notes(av_adj, dune_adj, yt, spidey_suggested_tier),
     }
 
     return signals
 
 
-def _build_notes(av_adj, dune_adj, trends, yt, reddit=None, spidey_tier=None) -> str:
+def _build_notes(av_adj, dune_adj, yt, spidey_tier=None) -> str:
     notes = []
     if av_adj < -2:
         notes.append(f"Avengers downgraded {av_adj:+.0f}pts — teaser decay matches Love&Thunder pattern.")
@@ -663,8 +998,5 @@ def _build_notes(av_adj, dune_adj, trends, yt, reddit=None, spidey_tier=None) ->
 
     if yt and yt.get("status") != "ok":
         notes.append("Add YOUTUBE_API_KEY to Streamlit secrets for live trailer view data.")
-
-    if not trends:
-        notes.append("Google Trends unavailable — using fallback search interest values.")
 
     return " ".join(notes)
