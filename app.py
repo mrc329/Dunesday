@@ -456,7 +456,7 @@ with st.sidebar:
     Avengers day 1: <b style='color:{P['av']}'>0 screens</b><br>
     Avengers first IMAX: <b style='color:{P['av']}'>Jan 8</b>
     </div>
-    """, unsafe_allow_html=True)
+    """.strip(), unsafe_allow_html=True)
 
 
 # ── RUN MODEL ─────────────────────────────────────────────────────────────────
@@ -742,7 +742,7 @@ with tab3:
       </span><br>
       <span style='color:{P['dim']}; font-size:0.82rem'>{cal.get("notes", "")}</span>
     </div>
-    """, unsafe_allow_html=True)
+    """.strip(), unsafe_allow_html=True)
 
     # ── Parse YouTube API results ─────────────────────────────────────────────
     yt_videos   = yt_stats.get("videos", {}) if yt_stats.get("status") == "ok" else {}
@@ -906,7 +906,7 @@ with tab3:
                 &nbsp;·&nbsp; source: {teaser_src}
               </span>
             </div>
-            """, unsafe_allow_html=True)
+            """.strip(), unsafe_allow_html=True)
 
     with col_b:
         _dune_color = P["dune"]
@@ -1182,7 +1182,7 @@ with tab3:
           </span><br>
           <span style='color:{P["dim"]}; font-size:0.76rem'>{_detail}</span>
         </div>
-        """, unsafe_allow_html=True)
+        """.strip(), unsafe_allow_html=True)
     else:
         st.info(
             "Spider-Man: Brand New Day trailer released 2026-03-18 across Sony Pictures channels. "
@@ -1536,7 +1536,7 @@ That's a **${_weighted_p50 - _sc_a_p50:+.0f}M** signal in favor of moving.
     Live signals: {' · '.join(cal['sources'])}
     </span>
     </div>
-    """, unsafe_allow_html=True)
+    """.strip(), unsafe_allow_html=True)
 
 
 # ── TAB 6: TRAILERS ───────────────────────────────────────────────────────────
@@ -1608,7 +1608,7 @@ with tab6:
             Dune's lower Wikipedia search interest reflects zero promotional
             material released to date, not audience demand.
             </div>
-            """,
+            """.strip(),
             unsafe_allow_html=True,
         )
 
