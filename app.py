@@ -1624,73 +1624,21 @@ with tab7:
     # ── AT-A-GLANCE SUMMARY BLOCK ──────────────────────────────────────────────
     fp_dune = FILM_PARAMS["DUNE"]
     fp_av   = FILM_PARAMS["AVENGERS"]
-    st.markdown(
-        f"""
-        <div style='
-            background:{P["info_bg"]};
-            border:1px solid {P["card_rule"]};
-            border-radius:6px;
-            padding:18px 24px 14px;
-            margin-bottom:20px;
-        '>
-          <p style='font-size:0.58rem; letter-spacing:2px; color:{P["dim"]}; margin:0 0 12px;'>
-            KEY ASSUMPTIONS AT A GLANCE
-          </p>
-          <div style='display:grid; grid-template-columns:repeat(4,1fr); gap:12px 24px;'>
-
-            <div>
-              <div style='font-size:0.62rem; color:{P["dim"]}; letter-spacing:1px; margin-bottom:2px;'>SIMULATIONS</div>
-              <div style='font-size:1.25rem; font-weight:600; color:{P["text"]};'>5,000</div>
-              <div style='font-size:0.7rem; color:{P["dim"]};'>Monte Carlo trials</div>
-            </div>
-
-            <div>
-              <div style='font-size:0.62rem; color:{P["dim"]}; letter-spacing:1px; margin-bottom:2px;'>OUTPUT</div>
-              <div style='font-size:1.25rem; font-weight:600; color:{P["text"]};'>P10 · P50 · P90</div>
-              <div style='font-size:0.7rem; color:{P["dim"]};'>net-profit distribution</div>
-            </div>
-
-            <div>
-              <div style='font-size:0.62rem; color:{P["dim"]}; letter-spacing:1px; margin-bottom:2px;'>WINDOW</div>
-              <div style='font-size:1.25rem; font-weight:600; color:{P["text"]};'>45 days</div>
-              <div style='font-size:0.7rem; color:{P["dim"]};'>from opening date</div>
-            </div>
-
-            <div>
-              <div style='font-size:0.62rem; color:{P["dim"]}; letter-spacing:1px; margin-bottom:2px;'>IMAX EXCLUSIVE</div>
-              <div style='font-size:1.25rem; font-weight:600; color:{P["dune"]};'>21 days</div>
-              <div style='font-size:0.7rem; color:{P["dim"]};'>Dune · Dec 18 – Jan 7</div>
-            </div>
-
-            <div>
-              <div style='font-size:0.62rem; color:{P["dim"]}; letter-spacing:1px; margin-bottom:2px;'>DUNE OW MEAN</div>
-              <div style='font-size:1.25rem; font-weight:600; color:{P["dune"]};'>${fp_dune["ow_gross_mean_M"]:.0f}M</div>
-              <div style='font-size:0.7rem; color:{P["dim"]};'>±${fp_dune["ow_gross_std_M"]:.0f}M σ</div>
-            </div>
-
-            <div>
-              <div style='font-size:0.62rem; color:{P["dim"]}; letter-spacing:1px; margin-bottom:2px;'>AVENGERS OW MEAN</div>
-              <div style='font-size:1.25rem; font-weight:600; color:{P["av"]};'>${fp_av["ow_gross_mean_M"]:.0f}M</div>
-              <div style='font-size:0.7rem; color:{P["dim"]};'>±${fp_av["ow_gross_std_M"]:.0f}M σ</div>
-            </div>
-
-            <div>
-              <div style='font-size:0.62rem; color:{P["dim"]}; letter-spacing:1px; margin-bottom:2px;'>DUNE BUDGET</div>
-              <div style='font-size:1.25rem; font-weight:600; color:{P["dune"]};'>${fp_dune["budget_M"]:.0f}M</div>
-              <div style='font-size:0.7rem; color:{P["dim"]};'>+{fp_dune["mktg_phi"]:.0%} mktg → ${fp_dune["budget_M"]*(1+fp_dune["mktg_phi"]):.0f}M all-in</div>
-            </div>
-
-            <div>
-              <div style='font-size:0.62rem; color:{P["dim"]}; letter-spacing:1px; margin-bottom:2px;'>AVENGERS BUDGET</div>
-              <div style='font-size:1.25rem; font-weight:600; color:{P["av"]};'>${fp_av["budget_M"]:.0f}M</div>
-              <div style='font-size:0.7rem; color:{P["dim"]};'>+{fp_av["mktg_phi"]:.0%} mktg → ${fp_av["budget_M"]*(1+fp_av["mktg_phi"]):.0f}M all-in</div>
-            </div>
-
-          </div>
-        </div>
-        """.strip(),
-        unsafe_allow_html=True,
+    _glance_html = (
+f"<div style='background:{P['info_bg']};border:1px solid {P['card_rule']};border-radius:6px;padding:18px 24px 14px;margin-bottom:20px;'>"
+f"<p style='font-size:0.58rem;letter-spacing:2px;color:{P['dim']};margin:0 0 12px;'>KEY ASSUMPTIONS AT A GLANCE</p>"
+f"<div style='display:grid;grid-template-columns:repeat(4,1fr);gap:12px 24px;'>"
+f"<div><div style='font-size:0.62rem;color:{P['dim']};letter-spacing:1px;margin-bottom:2px;'>SIMULATIONS</div><div style='font-size:1.25rem;font-weight:600;color:{P['text']};'>5,000</div><div style='font-size:0.7rem;color:{P['dim']};'>Monte Carlo trials</div></div>"
+f"<div><div style='font-size:0.62rem;color:{P['dim']};letter-spacing:1px;margin-bottom:2px;'>OUTPUT</div><div style='font-size:1.25rem;font-weight:600;color:{P['text']};'>P10 \u00b7 P50 \u00b7 P90</div><div style='font-size:0.7rem;color:{P['dim']};'>net-profit distribution</div></div>"
+f"<div><div style='font-size:0.62rem;color:{P['dim']};letter-spacing:1px;margin-bottom:2px;'>WINDOW</div><div style='font-size:1.25rem;font-weight:600;color:{P['text']};'>45 days</div><div style='font-size:0.7rem;color:{P['dim']};'>from opening date</div></div>"
+f"<div><div style='font-size:0.62rem;color:{P['dim']};letter-spacing:1px;margin-bottom:2px;'>IMAX EXCLUSIVE</div><div style='font-size:1.25rem;font-weight:600;color:{P['dune']};'>21 days</div><div style='font-size:0.7rem;color:{P['dim']};'>Dune \u00b7 Dec 18 \u2013 Jan 7</div></div>"
+f"<div><div style='font-size:0.62rem;color:{P['dim']};letter-spacing:1px;margin-bottom:2px;'>DUNE OW MEAN</div><div style='font-size:1.25rem;font-weight:600;color:{P['dune']};'>${fp_dune['ow_gross_mean_M']:.0f}M</div><div style='font-size:0.7rem;color:{P['dim']};'>\u00b1${fp_dune['ow_gross_std_M']:.0f}M \u03c3</div></div>"
+f"<div><div style='font-size:0.62rem;color:{P['dim']};letter-spacing:1px;margin-bottom:2px;'>AVENGERS OW MEAN</div><div style='font-size:1.25rem;font-weight:600;color:{P['av']};'>${fp_av['ow_gross_mean_M']:.0f}M</div><div style='font-size:0.7rem;color:{P['dim']};'>\u00b1${fp_av['ow_gross_std_M']:.0f}M \u03c3</div></div>"
+f"<div><div style='font-size:0.62rem;color:{P['dim']};letter-spacing:1px;margin-bottom:2px;'>DUNE BUDGET</div><div style='font-size:1.25rem;font-weight:600;color:{P['dune']};'>${fp_dune['budget_M']:.0f}M</div><div style='font-size:0.7rem;color:{P['dim']};'>+{fp_dune['mktg_phi']:.0%} mktg \u2192 ${fp_dune['budget_M']*(1+fp_dune['mktg_phi']):.0f}M all-in</div></div>"
+f"<div><div style='font-size:0.62rem;color:{P['dim']};letter-spacing:1px;margin-bottom:2px;'>AVENGERS BUDGET</div><div style='font-size:1.25rem;font-weight:600;color:{P['av']};'>${fp_av['budget_M']:.0f}M</div><div style='font-size:0.7rem;color:{P['dim']};'>+{fp_av['mktg_phi']:.0%} mktg \u2192 ${fp_av['budget_M']*(1+fp_av['mktg_phi']):.0f}M all-in</div></div>"
+"</div></div>"
     )
+    st.markdown(_glance_html, unsafe_allow_html=True)
 
     # ── OBJECTIVE ─────────────────────────────────────────────────────────────
     st.markdown(
