@@ -146,16 +146,18 @@ def calibrate_from_spidey_trailer(views_M: float) -> str:
     Map Spider-Man: Brand New Day trailer view count to an impact tier.
     Used to auto-suggest the SPIDEY_IMPACT_ADJ tier in the sidebar.
 
-    Benchmarks (24hr YouTube views at comparable release stage):
-      NWH T1:         355M  → broke records, MCU at peak
-      FFH T1:         135M  → strong, healthy MCU
-      Homecoming T1:  ~64M  → acceptable for reboot
+    Benchmarks (24hr combined views):
+      BND T1:         718.6M → all-time record, MCU demand at historic peak
+      D&W T1:         365M   → previous film record (Super Bowl drop)
+      NWH T1:         355M   → previous MCU record
+      FFH T1:         135M   → strong, healthy MCU
+      Homecoming T1:  ~64M   → acceptable for reboot
     Returns: tier string matching SPIDEY_IMPACT_ADJ keys
     """
     if views_M is None:
         return None
 
-    if views_M >= 350:    return "Blockbuster"   # NWH territory — MCU hype peak
+    if views_M >= 350:    return "Blockbuster"   # D&W/NWH territory and above
     elif views_M >= 200:  return "Strong"         # healthy MCU demand signal
     elif views_M >= 110:  return "Neutral"        # matches FFH baseline
     elif views_M >= 60:   return "Soft"           # below Homecoming level

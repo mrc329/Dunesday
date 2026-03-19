@@ -391,13 +391,18 @@ with st.sidebar:
 
     st.divider()
     st.markdown("**Competitor Signals**")
+    _default_spidey = (
+        cal.get("spidey_suggested_tier")
+        or signals.get("spiderman", {}).get("suggested_tier")
+        or "Neutral"
+    )
     spidey_tier = st.select_slider(
         "Spider-Man: Brand New Day (Jul 25 2026)",
         options=["Disappoints", "Soft", "Neutral", "Strong", "Blockbuster"],
-        value="Neutral",
+        value=_default_spidey,
         help="Spider-Man opens Jul 25 — 5 months before Avengers. Its performance "
              "is an MCU brand health signal. Blockbuster = +4pts to Avengers score + 1.10x OW. "
-             "Disappoints = −5pts + 0.90x OW. Auto-suggested from trailer view count when YouTube key is set.",
+             "Disappoints = −5pts + 0.90x OW. Auto-calibrated from trailer data; override manually.",
     )
     spidey_adj = SPIDEY_IMPACT_ADJ[spidey_tier]
     spidey_color = (P["av"] if spidey_adj < 0 else
