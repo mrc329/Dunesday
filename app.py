@@ -1683,7 +1683,7 @@ with tab7:
 
           </div>
         </div>
-        """,
+        """.strip(),
         unsafe_allow_html=True,
     )
 
@@ -1702,7 +1702,7 @@ with tab7:
         Monte Carlo simulation with calibrated WOM (word-of-mouth) multipliers,
         calendar demand weights, and IMAX scarcity constraints.
         </div>
-        """,
+        """.strip(),
         unsafe_allow_html=True,
     )
 
@@ -1863,7 +1863,7 @@ with tab7:
             &nbsp;&nbsp;&nbsp;<span style='font-family:monospace; font-size:0.78rem;'>
             [cell: =OW * HOLD_WK * CAL / 7]</span>
             </div>
-            """,
+            """.strip(),
             unsafe_allow_html=True,
         )
 
@@ -1921,7 +1921,7 @@ with tab7:
         Break-even%  =  COUNTIF(B11:range, "&gt;0") / 5000 × 100
 
         </div>
-        """,
+        """.strip(),
         unsafe_allow_html=True,
     )
 
@@ -1971,7 +1971,7 @@ with tab7:
             • Audience score drives WOM via linear regression on 7 comparable films<br>
             • Polymarket odds are treated as crowd-wisdom priors, not direct inputs
             </div>
-            """,
+            """.strip(),
             unsafe_allow_html=True,
         )
     with h_col2:
@@ -1987,7 +1987,7 @@ with tab7:
             • The Polymarket full-year market includes a calendar-year bias vs. Avengers'
               2-week Dec run — ratio signal is directional, not exact
             </div>
-            """,
+            """.strip(),
             unsafe_allow_html=True,
         )
 
