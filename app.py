@@ -1827,8 +1827,10 @@ f"<div><div style='font-size:0.62rem;color:{P['dim']};letter-spacing:1px;margin-
     )
 
     _formula_html = (
+        f"<div style='background:{P['info_bg']};border:1px solid {P['card_rule']};border-radius:6px;padding:18px 24px 16px;margin-bottom:4px;'>"
+        f"<p style='font-size:0.58rem;letter-spacing:2px;color:{P['dim']};margin:0 0 4px;'>AUDIT TRAIL — trace every calculation from inputs to net profit</p>"
         f"<div style='color:{P['text']}; font-size:0.82rem; line-height:2.1;"
-        f" font-family:monospace; background:transparent; padding:8px 0;'>"
+        f" font-family:monospace; padding:8px 0 0;'>"
         f"<b style='color:{P['dune']}; font-family:sans-serif; letter-spacing:1px;'>"
         f"PER TRIAL (each of 5,000 Monte Carlo draws)</b><br><br>"
         f"B2  =  NORM.INV(RAND(), audience_mean, audience_std)<br>"
@@ -1859,7 +1861,7 @@ f"<div><div style='font-size:0.62rem;color:{P['dim']};letter-spacing:1px;margin-
         f"P50  =  PERCENTILE(B11:range, 0.50) &nbsp;&nbsp;"
         f"P90  =  PERCENTILE(B11:range, 0.90)<br>"
         f"Break-even%  =  COUNTIF(B11:range, \"&gt;0\") / 5000 × 100"
-        f"</div>"
+        f"</div></div>"
     )
     st.html(_formula_html)
 
