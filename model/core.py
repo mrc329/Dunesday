@@ -12,7 +12,7 @@ warnings.filterwarnings("ignore")
 from model.config import (
     OPEN_DATE, DAYS, RUNTIME, TURNAROUND, OPERATING_HOURS,
     SCREEN_INVENTORY, SEAT_CAPACITY, BASE_PRICE, FED_REGIONS,
-    STUDIO_SPLIT, IMAX_CONFIG, FILM_PARAMS,
+    STUDIO_SPLIT, IMAX_CONFIG, DOLBY_CONFIG, DOLBY_DAILY_BASE_M, FILM_PARAMS,
     WOM_SLOPE, WOM_INTERCEPT,
     HOLIDAY_OVERRIDES, DOW_MULTIPLIERS,
     SPIDEY_OW_MULT,
@@ -174,6 +174,39 @@ def compute_imax_revenue(
     }
 
 
+# ── DOLBY REVENUE ────────────────────────────────────────────────────────────
+
+def compute_dolby_revenue(
+    film: str,
+    wom_mult_val: float = 1.0,
+    cfg: dict = None,
+) -> dict:
+    """
+    45-day Dolby Cinema revenue for a film.
+    No exclusive window — both films can access Dolby from day 1.
+    Screen allocation reflects Disney's priority push for Avengers.
+    """
+    if cfg is None:
+        cfg = DOLBY_CONFIG
+
+    screens = cfg["dune_screens"] if film == "DUNE" else cfg["avengers_screens"]
+    total_screens = cfg["total_screens"]
+    decay_holds = [1.0, 0.56, 0.43, 0.34, 0.27, 0.22, 0.18]
+    daily = []
+
+    for day in range(DAYS):
+        cal = CAL_MULT[day]
+        dk  = decay_holds[min(day // 7, 6)]
+        rev = DOLBY_DAILY_BASE_M * (screens / total_screens) * cal * dk * wom_mult_val
+        daily.append(rev)
+
+    daily_arr = np.array(daily)
+    return {
+        "daily": daily_arr,
+        "total": daily_arr.sum(),
+    }
+
+
 # ── IMAX GAP SUMMARY ─────────────────────────────────────────────────────────
 
 def imax_gap_summary() -> dict:
@@ -236,8 +269,9 @@ def run_monte_carlo(
         ow_adj *= SPIDEY_OW_MULT.get(spidey_tier, 1.0)
         ow_adj *= polymarket_ow_scalar(polymarket_ow_odds)
 
-    revenues  = []
-    imax_revs = []
+    revenues   = []
+    imax_revs  = []
+    dolby_revs = []
 
     # Weekly decay holds
     wk_holds_base = [1.0, 0.56, 0.43, 0.34, 0.27, 0.22, 0.18]
@@ -270,13 +304,18 @@ def run_monte_carlo(
         imax_studio_M = imax["total"] * STUDIO_SPLIT
         imax_revs.append(imax["total"])
 
+        # Dolby revenue
+        dolby = compute_dolby_revenue(film, wm)
+        dolby_studio_M = dolby["total"] * STUDIO_SPLIT
+        dolby_revs.append(dolby["total"])
+
         # International
         intl_mult  = rng.normal(intl_mean, p["intl_mult_std"])
         intl_mult  = max(0.5, intl_mult)
         intl_rev_M = dom_gross_M * intl_mult * STUDIO_SPLIT
 
         # Total & net profit
-        total_studio_M = dom_studio_M + imax_studio_M + intl_rev_M
+        total_studio_M = dom_studio_M + imax_studio_M + dolby_studio_M + intl_rev_M
         cost_M = p["budget_M"] * (1 + p["mktg_phi"])
         revenues.append(total_studio_M - cost_M)
 
@@ -288,7 +327,8 @@ def run_monte_carlo(
         "p90":           float(np.percentile(arr, 90)),  # 90th percentile – upside / optimistic
         "mean":          float(arr.mean()),
         "breakeven_pct": float((arr > 0).mean() * 100),
-        "imax_rev_mean": float(np.mean(imax_revs)),
+        "imax_rev_mean":  float(np.mean(imax_revs)),
+        "dolby_rev_mean": float(np.mean(dolby_revs)),
     }
 
 

@@ -45,6 +45,24 @@ IMAX_CONFIG = {
     "split_screens":       200,      # each film after Jan 8
 }
 
+# ── DOLBY CINEMA CONFIGURATION ────────────────────────────────────────────────
+# Source: Disney pushing Dolby/D-Box/4DX for Avengers after losing IMAX
+# exclusivity (TheWrap via Screen Rant, Mar 2026). No exclusive window applies.
+# US Dolby Cinema locations: ~240 (all AMC-operated).
+# Avengers gets priority allocation; Dune already holds IMAX advantage.
+DOLBY_CONFIG = {
+    "total_screens":      240,   # US Dolby Cinema locations (AMC-operated)
+    "dune_screens":        80,   # Dune allocation — IMAX is its premium format
+    "avengers_screens":   160,   # Avengers allocation — Disney's priority push
+    "ticket_price":       21.00, # national avg (vs $23.50 IMAX, $14.10 std)
+    "seat_capacity":       250,  # Dolby Cinema auditorium seats
+}
+# $M/day at 240 screens, mean occupancy, no cal mult.
+# Derivation: scales from IMAX_DAILY_BASE_M by screen count and ticket price,
+# with a 0.73 destination discount (IMAX draws more out-of-way trips than Dolby).
+# 4.9 × (240/400) × (21.00/23.50) × 0.73 ≈ 1.60 → rounded to 1.6M
+DOLBY_DAILY_BASE_M = 1.6
+
 # ── FILM PARAMETERS ───────────────────────────────────────────────────────────
 FILM_PARAMS = {
     "DUNE": dict(
