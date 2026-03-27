@@ -1826,54 +1826,42 @@ f"<div><div style='font-size:0.62rem;color:{P['dim']};letter-spacing:1px;margin-
         unsafe_allow_html=True,
     )
 
-    st.markdown(
-        f"""
-        <div style='color:{P['text']}; font-size:0.82rem; line-height:2.1;
-                    font-family:monospace; background:transparent; padding:8px 0;'>
-
-        <b style='color:{P['dune']}; font-family:sans-serif; letter-spacing:1px;'>
-        PER TRIAL (each of 5,000 Monte Carlo draws)</b><br><br>
-
-        B2  =  NORM.INV(RAND(), audience_mean, audience_std)
-               <span style='color:{P['dim']};'>→ sampled audience score</span><br>
-
-        B3  =  MAX(0.5,  WOM_SLOPE × B2 + WOM_INTERCEPT)
-               <span style='color:{P['dim']};'>→ WOM multiplier  (e.g. 1.02×)</span><br><br>
-
-        B4  =  NORM.INV(RAND(),  ow_gross_mean × scenario_adj × spidey_adj × poly_adj,
-               &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;ow_gross_std  × scenario_adj)
-               <span style='color:{P['dim']};'>→ opening weekend gross ($M)</span><br><br>
-
-        <b style='color:{P['dim']}; font-family:sans-serif;'>Domestic gross (days 1–45)</b><br>
-        B5  =  SUMPRODUCT( B4 × hold[wk] × wom_adj[wk] × cal_mult[day] / 7 )
-               <span style='color:{P['dim']};'>→ for each day:  OW × hold × WOM-adj × CAL / 7</span><br>
-        B6  =  B5 × STUDIO_SPLIT  <span style='color:{P['dim']};'>→ studio domestic ($M)</span><br><br>
-
-        <b style='color:{P['dim']}; font-family:sans-serif;'>IMAX revenue</b><br>
-        B7  =  SUM( IMAX_DAILY_BASE_M × (screens[day]/400) × cal_mult[day] × decay[wk] × B3 )
-               <span style='color:{P['dim']};'>→ total IMAX gross ($M)</span><br>
-        B8  =  B7 × STUDIO_SPLIT  <span style='color:{P['dim']};'>→ studio IMAX ($M)</span><br><br>
-
-        <b style='color:{P['dim']}; font-family:sans-serif;'>International</b><br>
-        B9  =  B5 × MAX(0.5, NORM.INV(RAND(), intl_mult_mean, intl_mult_std)) × STUDIO_SPLIT
-               <span style='color:{P['dim']};'>→ studio international ($M)</span><br><br>
-
-        <b style='color:{P['dim']}; font-family:sans-serif;'>Cost &amp; net profit</b><br>
-        B10 =  budget_M × (1 + mktg_phi)
-               <span style='color:{P['dim']};'>→ all-in cost ($M)</span><br>
-        <b>B11 =  (B6 + B8 + B9) − B10
-               <span style='color:{P['dune']};'>→ NET STUDIO PROFIT ($M)  ← output cell</span></b><br><br>
-
-        <b style='color:{P['dim']}; font-family:sans-serif;'>Output statistics (over 5,000 trials)</b><br>
-        P10  =  PERCENTILE(B11:range, 0.10) &nbsp;&nbsp;
-        P50  =  PERCENTILE(B11:range, 0.50) &nbsp;&nbsp;
-        P90  =  PERCENTILE(B11:range, 0.90)<br>
-        Break-even%  =  COUNTIF(B11:range, "&gt;0") / 5000 × 100
-
-        </div>
-        """.strip(),
-        unsafe_allow_html=True,
+    _formula_html = (
+        f"<div style='color:{P['text']}; font-size:0.82rem; line-height:2.1;"
+        f" font-family:monospace; background:transparent; padding:8px 0;'>"
+        f"<b style='color:{P['dune']}; font-family:sans-serif; letter-spacing:1px;'>"
+        f"PER TRIAL (each of 5,000 Monte Carlo draws)</b><br><br>"
+        f"B2  =  NORM.INV(RAND(), audience_mean, audience_std)<br>"
+        f"&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style='color:{P['dim']};'>→ sampled audience score</span><br>"
+        f"B3  =  MAX(0.5,&nbsp; WOM_SLOPE × B2 + WOM_INTERCEPT)<br>"
+        f"&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style='color:{P['dim']};'>→ WOM multiplier&nbsp; (e.g. 1.02×)</span><br><br>"
+        f"B4  =  NORM.INV(RAND(),&nbsp; ow_gross_mean × scenario_adj × spidey_adj × poly_adj,<br>"
+        f"&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;ow_gross_std&nbsp; × scenario_adj)<br>"
+        f"&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style='color:{P['dim']};'>→ opening weekend gross ($M)</span><br><br>"
+        f"<b style='color:{P['dim']}; font-family:sans-serif;'>Domestic gross (days 1–45)</b><br>"
+        f"B5  =  SUMPRODUCT( B4 × hold[wk] × wom_adj[wk] × cal_mult[day] / 7 )<br>"
+        f"&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style='color:{P['dim']};'>→ for each day:&nbsp; OW × hold × WOM-adj × CAL / 7</span><br>"
+        f"B6  =  B5 × STUDIO_SPLIT&nbsp; <span style='color:{P['dim']};'>→ studio domestic ($M)</span><br><br>"
+        f"<b style='color:{P['dim']}; font-family:sans-serif;'>IMAX revenue</b><br>"
+        f"B7  =  SUM( IMAX_DAILY_BASE_M × (screens[day]/400) × cal_mult[day] × decay[wk] × B3 )<br>"
+        f"&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style='color:{P['dim']};'>→ total IMAX gross ($M)</span><br>"
+        f"B8  =  B7 × STUDIO_SPLIT&nbsp; <span style='color:{P['dim']};'>→ studio IMAX ($M)</span><br><br>"
+        f"<b style='color:{P['dim']}; font-family:sans-serif;'>International</b><br>"
+        f"B9  =  B5 × MAX(0.5, NORM.INV(RAND(), intl_mult_mean, intl_mult_std)) × STUDIO_SPLIT<br>"
+        f"&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style='color:{P['dim']};'>→ studio international ($M)</span><br><br>"
+        f"<b style='color:{P['dim']}; font-family:sans-serif;'>Cost &amp; net profit</b><br>"
+        f"B10 =  budget_M × (1 + mktg_phi)<br>"
+        f"&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style='color:{P['dim']};'>→ all-in cost ($M)</span><br>"
+        f"<b>B11 =  (B6 + B8 + B9) − B10<br>"
+        f"&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style='color:{P['dune']};'>→ NET STUDIO PROFIT ($M)&nbsp; ← output cell</span></b><br><br>"
+        f"<b style='color:{P['dim']}; font-family:sans-serif;'>Output statistics (over 5,000 trials)</b><br>"
+        f"P10  =  PERCENTILE(B11:range, 0.10) &nbsp;&nbsp;"
+        f"P50  =  PERCENTILE(B11:range, 0.50) &nbsp;&nbsp;"
+        f"P90  =  PERCENTILE(B11:range, 0.90)<br>"
+        f"Break-even%  =  COUNTIF(B11:range, \"&gt;0\") / 5000 × 100"
+        f"</div>"
     )
+    st.markdown(_formula_html, unsafe_allow_html=True)
 
     st.markdown(f"<hr style='border-color:{P['card_rule']}; margin:14px 0;'>", unsafe_allow_html=True)
 
