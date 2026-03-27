@@ -1638,7 +1638,7 @@ f"<div><div style='font-size:0.62rem;color:{P['dim']};letter-spacing:1px;margin-
 f"<div><div style='font-size:0.62rem;color:{P['dim']};letter-spacing:1px;margin-bottom:2px;'>AVENGERS BUDGET</div><div style='font-size:1.25rem;font-weight:600;color:{P['av']};'>${fp_av['budget_M']:.0f}M</div><div style='font-size:0.7rem;color:{P['dim']};'>+{fp_av['mktg_phi']:.0%} mktg \u2192 ${fp_av['budget_M']*(1+fp_av['mktg_phi']):.0f}M all-in</div></div>"
 "</div></div>"
     )
-    st.markdown(_glance_html, unsafe_allow_html=True)
+    st.html(_glance_html)
 
     # ── OBJECTIVE ─────────────────────────────────────────────────────────────
     st.markdown(
@@ -1861,7 +1861,7 @@ f"<div><div style='font-size:0.62rem;color:{P['dim']};letter-spacing:1px;margin-
         f"Break-even%  =  COUNTIF(B11:range, \"&gt;0\") / 5000 × 100"
         f"</div>"
     )
-    st.markdown(_formula_html, unsafe_allow_html=True)
+    st.html(_formula_html)
 
     st.markdown(f"<hr style='border-color:{P['card_rule']}; margin:14px 0;'>", unsafe_allow_html=True)
 
