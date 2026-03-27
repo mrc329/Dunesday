@@ -1724,6 +1724,35 @@ f"<div><div style='font-size:0.62rem;color:{P['dim']};letter-spacing:1px;margin-
 
     st.markdown(f"<hr style='border-color:{P['card_rule']}; margin:14px 0;'>", unsafe_allow_html=True)
 
+    # ── SECTION B2: DOLBY CINEMA CONFIGURATION ────────────────────────────────
+    from model.config import DOLBY_CONFIG, DOLBY_DAILY_BASE_M
+    st.markdown(
+        f"<p style='font-size:0.62rem; letter-spacing:2px; color:{P['dim']}; margin-bottom:8px;'>"
+        "B2 · DOLBY CINEMA (Disney's IMAX mitigation strategy)</p>",
+        unsafe_allow_html=True,
+    )
+
+    dolby_rows = [
+        ("Total US Dolby Cinema screens",  "240",     "240",    "DOLBY_CONFIG['total_screens'] = 240  [all AMC-operated]"),
+        ("Exclusive window",               "none",    "none",   "No exclusive window — both films available day 1"),
+        ("Screen allocation",              f"{DOLBY_CONFIG['dune_screens']}",
+                                           f"{DOLBY_CONFIG['avengers_screens']}",
+                                           "Disney priority push for Avengers per TheWrap (Mar 2026)"),
+        ("Dolby ticket price (national avg)", "$21.00", "$21.00", "DOLBY_CONFIG['ticket_price']  [vs $23.50 IMAX]"),
+        ("Dolby seat capacity",            "250 seats","250 seats","DOLBY_CONFIG['seat_capacity']"),
+        ("Dolby daily base revenue",       f"${DOLBY_DAILY_BASE_M*(DOLBY_CONFIG['dune_screens']/DOLBY_CONFIG['total_screens']):.2f}M/day",
+                                           f"${DOLBY_DAILY_BASE_M*(DOLBY_CONFIG['avengers_screens']/DOLBY_CONFIG['total_screens']):.2f}M/day",
+                                           f"DOLBY_DAILY_BASE_M={DOLBY_DAILY_BASE_M}  [screens/240 × $1.6M base]"),
+        ("Daily Dolby formula",            "screens/240 × cal_mult × decay_hold × wom_mult × $1.6M",
+                                           "same",
+                                           "core.py: compute_dolby_revenue()"),
+    ]
+
+    df_dolby = pd.DataFrame(dolby_rows, columns=["Input", "Dune: Pt Three", "Avengers: Doomsday", "Variable / Formula"])
+    st.dataframe(df_dolby, use_container_width=True, hide_index=True)
+
+    st.markdown(f"<hr style='border-color:{P['card_rule']}; margin:14px 0;'>", unsafe_allow_html=True)
+
     # ── SECTION C: WOM MODEL ──────────────────────────────────────────────────
     st.markdown(
         f"<p style='font-size:0.62rem; letter-spacing:2px; color:{P['dim']}; margin-bottom:8px;'>"
@@ -1827,8 +1856,10 @@ f"<div><div style='font-size:0.62rem;color:{P['dim']};letter-spacing:1px;margin-
     )
 
     _formula_html = (
+        f"<div style='background:{P['info_bg']};border:1px solid {P['card_rule']};border-radius:6px;padding:18px 24px 16px;margin-bottom:4px;'>"
+        f"<p style='font-size:0.58rem;letter-spacing:2px;color:{P['dim']};margin:0 0 4px;'>AUDIT TRAIL — trace every calculation from inputs to net profit</p>"
         f"<div style='color:{P['text']}; font-size:0.82rem; line-height:2.1;"
-        f" font-family:monospace; background:transparent; padding:8px 0;'>"
+        f" font-family:monospace; padding:8px 0 0;'>"
         f"<b style='color:{P['dune']}; font-family:sans-serif; letter-spacing:1px;'>"
         f"PER TRIAL (each of 5,000 Monte Carlo draws)</b><br><br>"
         f"B2  =  NORM.INV(RAND(), audience_mean, audience_std)<br>"
@@ -1846,22 +1877,29 @@ f"<div><div style='font-size:0.62rem;color:{P['dim']};letter-spacing:1px;margin-
         f"B7  =  SUM( IMAX_DAILY_BASE_M × (screens[day]/400) × cal_mult[day] × decay[wk] × B3 )<br>"
         f"&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style='color:{P['dim']};'>→ total IMAX gross ($M)</span><br>"
         f"B8  =  B7 × STUDIO_SPLIT&nbsp; <span style='color:{P['dim']};'>→ studio IMAX ($M)</span><br><br>"
+        f"<b style='color:{P['dim']}; font-family:sans-serif;'>Dolby Cinema revenue</b>&nbsp;"
+        f"<span style='color:{P['dim']}; font-family:sans-serif; font-size:0.75rem;'>"
+        f"(Disney's IMAX mitigation — no exclusive window)</span><br>"
+        f"B7b =  SUM( DOLBY_DAILY_BASE_M × (screens[day]/240) × cal_mult[day] × decay[wk] × B3 )<br>"
+        f"&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style='color:{P['dim']};'>→ total Dolby gross ($M)&nbsp;"
+        f"[Dune: {DOLBY_CONFIG['dune_screens']} screens · Avengers: {DOLBY_CONFIG['avengers_screens']} screens]</span><br>"
+        f"B8b =  B7b × STUDIO_SPLIT&nbsp; <span style='color:{P['dim']};'>→ studio Dolby ($M)</span><br><br>"
         f"<b style='color:{P['dim']}; font-family:sans-serif;'>International</b><br>"
         f"B9  =  B5 × MAX(0.5, NORM.INV(RAND(), intl_mult_mean, intl_mult_std)) × STUDIO_SPLIT<br>"
         f"&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style='color:{P['dim']};'>→ studio international ($M)</span><br><br>"
         f"<b style='color:{P['dim']}; font-family:sans-serif;'>Cost &amp; net profit</b><br>"
         f"B10 =  budget_M × (1 + mktg_phi)<br>"
         f"&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style='color:{P['dim']};'>→ all-in cost ($M)</span><br>"
-        f"<b>B11 =  (B6 + B8 + B9) − B10<br>"
+        f"<b>B11 =  (B6 + B8 + B8b + B9) − B10<br>"
         f"&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style='color:{P['dune']};'>→ NET STUDIO PROFIT ($M)&nbsp; ← output cell</span></b><br><br>"
         f"<b style='color:{P['dim']}; font-family:sans-serif;'>Output statistics (over 5,000 trials)</b><br>"
         f"P10  =  PERCENTILE(B11:range, 0.10) &nbsp;&nbsp;"
         f"P50  =  PERCENTILE(B11:range, 0.50) &nbsp;&nbsp;"
         f"P90  =  PERCENTILE(B11:range, 0.90)<br>"
         f"Break-even%  =  COUNTIF(B11:range, \"&gt;0\") / 5000 × 100"
-        f"</div>"
+        f"</div></div>"
     )
-    st.markdown(_formula_html, unsafe_allow_html=True)
+    st.html(_formula_html)
 
     st.markdown(f"<hr style='border-color:{P['card_rule']}; margin:14px 0;'>", unsafe_allow_html=True)
 
