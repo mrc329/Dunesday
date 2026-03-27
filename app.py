@@ -11,7 +11,8 @@ import datetime
 
 from model.config import (FILM_PARAMS, IMAX_CONFIG,
                           AUDIENCE_SCORE_BENCHMARKS,
-                          SPIDEY_IMPACT_ADJ, WEEKLY_DECAY_BENCHMARKS)
+                          SPIDEY_IMPACT_ADJ, WEEKLY_DECAY_BENCHMARKS,
+                          DOLBY_CONFIG, DOLBY_DAILY_BASE_M)
 from model.core import (run_all_scenarios, imax_gap_summary, SCENARIOS,
                         polymarket_scenario_weights)
 from model.signals import (fetch_and_calibrate, YOUTUBE_TRAILER_URLS,
@@ -1632,6 +1633,7 @@ f"<div><div style='font-size:0.62rem;color:{P['dim']};letter-spacing:1px;margin-
 f"<div><div style='font-size:0.62rem;color:{P['dim']};letter-spacing:1px;margin-bottom:2px;'>OUTPUT</div><div style='font-size:1.25rem;font-weight:600;color:{P['text']};'>P10 \u00b7 P50 \u00b7 P90</div><div style='font-size:0.7rem;color:{P['dim']};'>net-profit distribution</div></div>"
 f"<div><div style='font-size:0.62rem;color:{P['dim']};letter-spacing:1px;margin-bottom:2px;'>WINDOW</div><div style='font-size:1.25rem;font-weight:600;color:{P['text']};'>45 days</div><div style='font-size:0.7rem;color:{P['dim']};'>from opening date</div></div>"
 f"<div><div style='font-size:0.62rem;color:{P['dim']};letter-spacing:1px;margin-bottom:2px;'>IMAX EXCLUSIVE</div><div style='font-size:1.25rem;font-weight:600;color:{P['dune']};'>21 days</div><div style='font-size:0.7rem;color:{P['dim']};'>Dune \u00b7 Dec 18 \u2013 Jan 7</div></div>"
+f"<div><div style='font-size:0.62rem;color:{P['dim']};letter-spacing:1px;margin-bottom:2px;'>DOLBY CINEMA</div><div style='font-size:1.25rem;font-weight:600;color:{P['av']};'>{DOLBY_CONFIG['avengers_screens']}/{DOLBY_CONFIG['total_screens']}</div><div style='font-size:0.7rem;color:{P['dim']};'>Avengers screens \u00b7 no exclusive</div></div>"
 f"<div><div style='font-size:0.62rem;color:{P['dim']};letter-spacing:1px;margin-bottom:2px;'>DUNE OW MEAN</div><div style='font-size:1.25rem;font-weight:600;color:{P['dune']};'>${fp_dune['ow_gross_mean_M']:.0f}M</div><div style='font-size:0.7rem;color:{P['dim']};'>\u00b1${fp_dune['ow_gross_std_M']:.0f}M \u03c3</div></div>"
 f"<div><div style='font-size:0.62rem;color:{P['dim']};letter-spacing:1px;margin-bottom:2px;'>AVENGERS OW MEAN</div><div style='font-size:1.25rem;font-weight:600;color:{P['av']};'>${fp_av['ow_gross_mean_M']:.0f}M</div><div style='font-size:0.7rem;color:{P['dim']};'>\u00b1${fp_av['ow_gross_std_M']:.0f}M \u03c3</div></div>"
 f"<div><div style='font-size:0.62rem;color:{P['dim']};letter-spacing:1px;margin-bottom:2px;'>DUNE BUDGET</div><div style='font-size:1.25rem;font-weight:600;color:{P['dune']};'>${fp_dune['budget_M']:.0f}M</div><div style='font-size:0.7rem;color:{P['dim']};'>+{fp_dune['mktg_phi']:.0%} mktg \u2192 ${fp_dune['budget_M']*(1+fp_dune['mktg_phi']):.0f}M all-in</div></div>"
@@ -1725,7 +1727,6 @@ f"<div><div style='font-size:0.62rem;color:{P['dim']};letter-spacing:1px;margin-
     st.markdown(f"<hr style='border-color:{P['card_rule']}; margin:14px 0;'>", unsafe_allow_html=True)
 
     # ── SECTION B2: DOLBY CINEMA CONFIGURATION ────────────────────────────────
-    from model.config import DOLBY_CONFIG, DOLBY_DAILY_BASE_M
     st.markdown(
         f"<p style='font-size:0.62rem; letter-spacing:2px; color:{P['dim']}; margin-bottom:8px;'>"
         "B2 · DOLBY CINEMA (Disney's IMAX mitigation strategy)</p>",
