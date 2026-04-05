@@ -1688,9 +1688,9 @@ f"<div><div style='font-size:0.62rem;color:{P['dim']};letter-spacing:1px;margin-
                                                f"{fp_av['audience_mean']}",               "A proxy for Rotten Tomatoes / CinemaScore (0–100 scale)"),
         ("Audience Score — Std Dev",           f"{fp_dune['audience_std']}",
                                                f"{fp_av['audience_std']}",                "Standard deviation of the audience score"),
-        ("International Revenue Mult — Mean",  f"{fp_dune['intl_mult_mean']:.2f}×",
-                                               f"{fp_av['intl_mult_mean']:.2f}×",         "Average ratio of international to domestic gross"),
-        ("International Revenue Mult — Std Dev", f"{fp_dune['intl_mult_std']:.2f}",
+        ("International Revenue — Mean",       f"{fp_dune['intl_mult_mean']:.2f}×",
+                                               f"{fp_av['intl_mult_mean']:.2f}×",         "How much the movie makes internationally, expressed as a multiple of domestic gross"),
+        ("International Revenue — Std Dev",   f"{fp_dune['intl_mult_std']:.2f}",
                                                f"{fp_av['intl_mult_std']:.2f}",           "Standard deviation of the international revenue multiplier"),
         ("Studio Revenue Split",               "60%",               "60%",                "Share of box office that goes to the studio"),
     ]
