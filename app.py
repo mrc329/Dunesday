@@ -1688,11 +1688,11 @@ f"<div><div style='font-size:0.62rem;color:{P['dim']};letter-spacing:1px;margin-
                                                f"{fp_av['audience_mean']}",               "A proxy for Rotten Tomatoes / CinemaScore (0–100 scale)"),
         ("Audience Score — Std Dev",           f"{fp_dune['audience_std']}",
                                                f"{fp_av['audience_std']}",                "Standard deviation of the audience score"),
-        ("International Revenue — Mean",       f"{fp_dune['intl_mult_mean']:.2f}×",
-                                               f"{fp_av['intl_mult_mean']:.2f}×",         "How much the movie makes internationally, expressed as a multiple of domestic gross"),
-        ("International Revenue — Std Dev",   f"{fp_dune['intl_mult_std']:.2f}",
+        ("International Revenue Multiplier — Mean", f"{fp_dune['intl_mult_mean']:.2f}×",
+                                               f"{fp_av['intl_mult_mean']:.2f}×",         "How much the movie makes internationally relative to domestic — e.g., 1.48× means international box office is 1.48 times the domestic gross"),
+        ("International Revenue Multiplier — Std Dev", f"{fp_dune['intl_mult_std']:.2f}",
                                                f"{fp_av['intl_mult_std']:.2f}",           "Standard deviation of the international revenue multiplier"),
-        ("Studio Revenue Split",               "60%",               "60%",                "Share of box office that goes to the studio"),
+        ("Studio Revenue Split",               "60%",               "60%",                "The amount of the gross box office the studio takes from running the picture"),
     ]
 
     df_core = pd.DataFrame(core_rows, columns=["Input", "Dune: Pt Three", "Avengers: Doomsday", "Description"])
@@ -1708,10 +1708,10 @@ f"<div><div style='font-size:0.62rem;color:{P['dim']};letter-spacing:1px;margin-
     )
 
     imax_rows = [
-        ("Total US IMAX Screens",       "400",    "400",   "All US IMAX locations"),
-        ("Dune Exclusive Window",        "21 days","0 days","Dec 18 – Jan 7  (confirmed WB deal)"),
-        ("Dune Screens During Exclusive","400",    "0",     "Dune holds all IMAX screens during its exclusive period"),
-        ("Split Screens After Jan 8",    "200",    "200",   "200 IMAX screens allocated to each film after exclusivity ends"),
+        ("Total US IMAX Screens",       "400",    "400",   "The total number of IMAX screens in the United States"),
+        ("Dune Exclusive Window",        "21 days","0 days","Dune: Part Three holds an exclusive deal for all 400 US IMAX screens from December 18 through January 7 — the split begins January 8"),
+        ("Dune Screens During Exclusive","400",    "0",     "All 400 US IMAX screens play Dune exclusively during the exclusive window; Avengers receives zero IMAX screens"),
+        ("Split Screens After Jan 8",    "200",    "200",   "Once the exclusive window ends, 200 IMAX screens are allocated to each film"),
         ("IMAX Ticket Price (national avg)","$23.50","$23.50","National average IMAX ticket price"),
         ("IMAX Seat Capacity",           "285 seats","285 seats","Average seating in a US IMAX auditorium"),
         ("IMAX Daily Base Revenue",      "$4.9M/day","$4.9M/day",
