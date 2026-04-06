@@ -1708,17 +1708,17 @@ f"<div><div style='font-size:0.62rem;color:{P['dim']};letter-spacing:1px;margin-
     )
 
     imax_rows = [
-        ("Total US IMAX Screens",       "400",    "400",   "The total number of IMAX screens in the United States"),
-        ("Dune Exclusive Window",        "21 days","0 days","Dune: Part Three holds an exclusive deal for all 400 US IMAX screens from December 18 through January 7 — the split begins January 8"),
-        ("Dune Screens During Exclusive","400",    "0",     "All 400 US IMAX screens play Dune exclusively during the exclusive window; Avengers receives zero IMAX screens"),
-        ("Split Screens After Jan 8",    "200",    "200",   "Once the exclusive window ends, 200 IMAX screens are allocated to each film"),
-        ("IMAX Ticket Price (national avg)","$23.50","$23.50","National average IMAX ticket price"),
-        ("IMAX Seat Capacity",           "285 seats","285 seats","Average seating in a US IMAX auditorium"),
-        ("IMAX Daily Base Revenue",      "$4.9M/day","$4.9M/day",
-         "Full-network daily revenue at 400 screens with mean occupancy at $23.50 per ticket"),
-        ("Daily IMAX Formula",           "screens/400 × cal_mult × decay_hold × wom_mult × $4.9M",
-                                         "same",
-         "Scales base IMAX revenue by screen share, calendar demand, weekly decay, and word-of-mouth"),
+        ("Total US IMAX Screens",        "400",    "400",   "The total number of IMAX screens in the United States"),
+        ("Dune Exclusive Window",         "21 days","0 days","Dune: Part Three holds an exclusive deal for all 400 US IMAX screens from December 18 through January 7 — the split begins January 8"),
+        ("Dune Screens During Exclusive", "400",    "0",     "We assume all 400 US IMAX screens are held for Dune: Part Three during the exclusive window"),
+        ("Split Screens After Jan 8",     "200",    "200",   "We assume a 50/50 split — 200 IMAX screens each for Dune: Part Three and Avengers: Doomsday"),
+        ("IMAX Ticket Price (national avg)","$23.50","$23.50","The national average price for an IMAX ticket is $23.50"),
+        ("IMAX Seat Capacity",            "285 seats","285 seats","Seat capacity is approximately 285 per IMAX theater"),
+        ("IMAX Daily Base Revenue",       "$4.9M/day","$4.9M/day",
+         "IMAX base revenue is calculated as: number of theaters × mean occupancy × base ticket price"),
+        ("Daily IMAX Formula",            "screens/400 × cal_mult × decay_hold × wom_mult × $4.9M",
+                                          "same",
+         "IMAX revenue per day is calculated as: number of theaters × mean occupancy × base ticket price × calendar demand × weekly decay"),
     ]
 
     df_imax = pd.DataFrame(imax_rows, columns=["Input", "Dune: Pt Three", "Avengers: Doomsday", "Description"])
