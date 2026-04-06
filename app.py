@@ -1734,19 +1734,19 @@ f"<div><div style='font-size:0.62rem;color:{P['dim']};letter-spacing:1px;margin-
     )
 
     dolby_rows = [
-        ("Total US Dolby Cinema Screens",  "240",     "240",    "All US Dolby Cinema locations (AMC-operated)"),
-        ("Exclusive Window",               "none",    "none",   "No exclusive window — both films available day 1"),
-        ("Screen Allocation",              f"{DOLBY_CONFIG['dune_screens']}",
-                                           f"{DOLBY_CONFIG['avengers_screens']}",
-                                           "Disney priority push for Avengers per TheWrap (Mar 2026)"),
-        ("Dolby Ticket Price (national avg)", "$21.00", "$21.00", "National average Dolby Cinema ticket price (vs $23.50 IMAX)"),
-        ("Dolby Seat Capacity",            "250 seats","250 seats","Average seating in a US Dolby Cinema auditorium"),
-        ("Dolby Daily Base Revenue",       f"${DOLBY_DAILY_BASE_M*(DOLBY_CONFIG['dune_screens']/DOLBY_CONFIG['total_screens']):.2f}M/day",
-                                           f"${DOLBY_DAILY_BASE_M*(DOLBY_CONFIG['avengers_screens']/DOLBY_CONFIG['total_screens']):.2f}M/day",
-                                           f"Prorated share of the $1.6M full-network daily base by screen allocation"),
-        ("Daily Dolby Formula",            "screens/240 × cal_mult × decay_hold × wom_mult × $1.6M",
-                                           "same",
-                                           "Scales base Dolby revenue by screen share, calendar demand, weekly decay, and word-of-mouth"),
+        ("Total US Dolby Cinema Screens",     "240",     "240",    "The total number of Dolby Cinema screens in the United States — all AMC-operated"),
+        ("Exclusive Window",                  "none",    "none",   "There is no exclusive window — both films are available on Dolby from opening day"),
+        ("Screen Allocation",                 f"{DOLBY_CONFIG['dune_screens']}",
+                                              f"{DOLBY_CONFIG['avengers_screens']}",
+                                              "We assume Avengers receives priority allocation (160 screens) with Dune getting the remaining 80, reflecting Disney's push for Dolby as its premium format"),
+        ("Dolby Ticket Price (national avg)", "$21.00",  "$21.00", "The national average price for a Dolby Cinema ticket is $21.00"),
+        ("Dolby Seat Capacity",               "250 seats","250 seats","Seat capacity is approximately 250 per Dolby Cinema theater"),
+        ("Dolby Daily Base Revenue",          f"${DOLBY_DAILY_BASE_M*(DOLBY_CONFIG['dune_screens']/DOLBY_CONFIG['total_screens']):.2f}M/day",
+                                              f"${DOLBY_DAILY_BASE_M*(DOLBY_CONFIG['avengers_screens']/DOLBY_CONFIG['total_screens']):.2f}M/day",
+                                              "Dolby base revenue is calculated as: number of theaters × mean occupancy × base ticket price, prorated by each film's screen allocation"),
+        ("Daily Dolby Formula",               "screens/240 × cal_mult × decay_hold × wom_mult × $1.6M",
+                                              "same",
+                                              "Dolby revenue per day is calculated as: number of theaters × mean occupancy × base ticket price × calendar demand × weekly decay"),
     ]
 
     df_dolby = pd.DataFrame(dolby_rows, columns=["Input", "Dune: Pt Three", "Avengers: Doomsday", "Description"])
