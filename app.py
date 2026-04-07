@@ -1763,20 +1763,20 @@ f"<div><div style='font-size:0.62rem;color:{P['dim']};letter-spacing:1px;margin-
 
     from model.config import WOM_SLOPE, WOM_INTERCEPT
     wom_rows = [
-        ("WOM Formula",        f"wom_mult = {WOM_SLOPE} × audience_score + ({WOM_INTERCEPT})",
-                               "Linear regression on 7 comparable films"),
-        ("Slope",              f"{WOM_SLOPE}",
-                               "Calibrated from: Endgame, IW, Top Gun, Dune P2, The Flash, Black Adam, DS MoM"),
-        ("Intercept",          f"{WOM_INTERCEPT}",
-                               "Same calibration set"),
-        ("Clamp Range",        "0.5 – 1.5×",
-                               "Prevents extreme outliers"),
-        ("Example @ score=88", f"{max(0.5, WOM_SLOPE*88 + WOM_INTERCEPT):.3f}×",
-                               "Avengers base: ~1.00×"),
-        ("Example @ score=87", f"{max(0.5, WOM_SLOPE*87 + WOM_INTERCEPT):.3f}×",
-                               "Dune base: ~0.98×"),
-        ("WOM Effect on Holds","week 2+: hold × clip(wom, 0.6, 1.4)",
-                               "Only activates from week 2 — OW holds are fixed"),
+        ("WOM Formula",              f"wom_mult = {WOM_SLOPE} × audience_score + ({WOM_INTERCEPT})",
+                                     "A formula that uses linear regression on 7 past movies to predict the likely audience score multiplier"),
+        ("Slope",                    f"{WOM_SLOPE}",
+                                     "The beta of the line — determines how quickly the word-of-mouth multiplier changes as the audience score moves"),
+        ("Intercept",                f"{WOM_INTERCEPT}",
+                                     "The basis of where the model starts — the value of the WOM multiplier when the audience score is zero"),
+        ("Clamp Range",              "0.5 – 1.5×",
+                                     "Removes outliers by capping the WOM multiplier so no single score can produce an extreme result"),
+        ("Avengers Audience Score",  f"{max(0.5, WOM_SLOPE*88 + WOM_INTERCEPT):.3f}×",
+                                     "Avengers baseline WOM multiplier, determined by the Audience Score slider"),
+        ("Dune Audience Score",      f"{max(0.5, WOM_SLOPE*87 + WOM_INTERCEPT):.3f}×",
+                                     "Dune baseline WOM multiplier, determined by the Audience Score slider"),
+        ("WOM Effect on Holds",      "week 2+: hold × clip(wom, 0.6, 1.4)",
+                                     "How likely the film is to hold its audience week over week — a higher WOM multiplier means stronger holds from week 2 onward"),
     ]
 
     df_wom = pd.DataFrame(wom_rows, columns=["Parameter", "Value", "Notes"])
