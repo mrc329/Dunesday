@@ -1795,10 +1795,9 @@ f"<div><div style='font-size:0.62rem;color:{P['dim']};letter-spacing:1px;margin-
     decay_base = [1.00, 0.56, 0.43, 0.34, 0.27, 0.22, 0.18]   # Neutral MCU — used in Monte Carlo
     decay_rows = []
     for wk_idx, hold in enumerate(decay_base):
-        label = f"Week {wk_idx}" if wk_idx == 0 else f"Week {wk_idx}"
-        ow_label = "Opening Weekend" if wk_idx == 0 else ""
-        decay_rows.append((label, f"{hold:.0%}", ow_label))
-    df_decay = pd.DataFrame(decay_rows, columns=["Week", "Hold vs OW", "Notes"])
+        label = "Week 0 — Opening Day / Premiere" if wk_idx == 0 else f"Week {wk_idx}"
+        decay_rows.append((label, f"{hold:.0%}"))
+    df_decay = pd.DataFrame(decay_rows, columns=["Week", "Hold vs OW"])
     st.dataframe(df_decay, use_container_width=True, hide_index=True)
 
     st.caption(
