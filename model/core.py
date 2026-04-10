@@ -112,17 +112,17 @@ def shows_per_day(film: str, fmt: str) -> int:
 def build_calendar_multipliers(n_days: int = DAYS) -> np.ndarray:
     """Day-by-day demand multiplier for Dec 18 opener."""
     multipliers = []
-    for d in range(n_days):
-        date = OPEN_DATE + datetime.timedelta(days=d)
-        dow  = date.weekday()
-        mo, dt = date.month, date.day
-        m = DOW_MULTIPLIERS.get(dow, 0.55)
-        key = (mo, dt)
-        if key in HOLIDAY_OVERRIDES:
-            m = HOLIDAY_OVERRIDES[key]
-        elif mo == 12 and 28 <= dt <= 30:
-            m = max(m, 0.75)
-        multipliers.append(m)
+    for day_idx in range(n_days):
+        date = OPEN_DATE + datetime.timedelta(days=day_idx)
+        day_of_week = date.weekday()
+        month, day_of_month = date.month, date.day
+        day_mult = DOW_MULTIPLIERS.get(day_of_week, 0.55)
+        date_key = (month, day_of_month)
+        if date_key in HOLIDAY_OVERRIDES:
+            day_mult = HOLIDAY_OVERRIDES[date_key]
+        elif month == 12 and 28 <= day_of_month <= 30:
+            day_mult = max(day_mult, 0.75)
+        multipliers.append(day_mult)
     return np.array(multipliers)
 
 
@@ -160,9 +160,9 @@ def compute_imax_revenue(
         else:
             screens = cfg["avengers_screens_excl"] if day < excl_days else cfg["split_screens"]
 
-        cal = CAL_MULT[day]
-        dk  = decay_holds[min(day // 7, 6)]
-        rev = IMAX_DAILY_BASE_M * (screens / 400) * cal * dk * wom_mult_val
+        cal_mult = CAL_MULT[day]
+        decay_hold = decay_holds[min(day // 7, 6)]
+        rev = IMAX_DAILY_BASE_M * (screens / 400) * cal_mult * decay_hold * wom_mult_val
         daily.append(rev)
 
     daily_arr = np.array(daily)
@@ -195,9 +195,9 @@ def compute_dolby_revenue(
     daily = []
 
     for day in range(DAYS):
-        cal = CAL_MULT[day]
-        dk  = decay_holds[min(day // 7, 6)]
-        rev = DOLBY_DAILY_BASE_M * (screens / total_screens) * cal * dk * wom_mult_val
+        cal_mult = CAL_MULT[day]
+        decay_hold = decay_holds[min(day // 7, 6)]
+        rev = DOLBY_DAILY_BASE_M * (screens / total_screens) * cal_mult * decay_hold * wom_mult_val
         daily.append(rev)
 
     daily_arr = np.array(daily)
@@ -258,77 +258,77 @@ def run_monte_carlo(
     Returns P10/P50/P90 net profit, break-even %, IMAX revenue mean.
     """
     rng = np.random.default_rng(seed)
-    p   = FILM_PARAMS[film]
+    film_params = FILM_PARAMS[film]
     if imax_cfg is None:
         imax_cfg = IMAX_CONFIG
 
-    aud_mean  = audience_override if audience_override is not None else p["audience_mean"]
-    intl_mean = intl_override     if intl_override     is not None else p["intl_mult_mean"]
+    aud_mean  = audience_override if audience_override is not None else film_params["audience_mean"]
+    intl_mean = intl_override     if intl_override     is not None else film_params["intl_mult_mean"]
     ow_adj    = SCENARIO_OW_ADJ.get((film, scenario_key), 1.0)
     if film == "AVENGERS":
         ow_adj *= SPIDEY_OW_MULT.get(spidey_tier, 1.0)
         ow_adj *= polymarket_ow_scalar(polymarket_ow_odds)
 
-    revenues   = []
-    imax_revs  = []
-    dolby_revs = []
+    profit_samples   = []
+    imax_rev_samples  = []
+    dolby_rev_samples = []
 
-    # Weekly decay holds
-    wk_holds_base = [1.0, 0.56, 0.43, 0.34, 0.27, 0.22, 0.18]
+    # Weekly decay holds (fraction of OW gross retained each week)
+    weekly_holds_base = [1.0, 0.56, 0.43, 0.34, 0.27, 0.22, 0.18]
 
     for trial in range(n):
         # Sample audience score → WOM multiplier
-        aud_score = rng.normal(aud_mean, p["audience_std"])
-        wm = np.clip(wom_mult(aud_score), 0.5, 1.5)
+        aud_score = rng.normal(aud_mean, film_params["audience_std"])
+        wom_factor = np.clip(wom_mult(aud_score), 0.5, 1.5)
 
         # Opening weekend draw
-        ow_gross = rng.normal(p["ow_gross_mean_M"] * ow_adj, p["ow_gross_std_M"] * ow_adj)
-        ow_gross = max(ow_gross, p["ow_gross_mean_M"] * ow_adj * 0.3)
+        ow_gross = rng.normal(film_params["ow_gross_mean_M"] * ow_adj, film_params["ow_gross_std_M"] * ow_adj)
+        ow_gross = max(ow_gross, film_params["ow_gross_mean_M"] * ow_adj * 0.3)
 
         # 45-day domestic gross with calendar + decay
         dom_gross_M = 0.0
         for day in range(DAYS):
-            wk  = min(day // 7, len(wk_holds_base) - 1)
-            cal = CAL_MULT[day]
-            # WoM adjusts hold rates from week 2 onward
-            hold = wk_holds_base[wk]
-            if wk >= 1:
-                hold = hold * np.clip(wm, 0.6, 1.4)
+            week_idx = min(day // 7, len(weekly_holds_base) - 1)
+            cal_mult = CAL_MULT[day]
+            # WOM adjusts hold rates from week 2 onward — strong word-of-mouth flattens the decay curve
+            hold = weekly_holds_base[week_idx]
+            if week_idx >= 1:
+                hold = hold * np.clip(wom_factor, 0.6, 1.4)
                 hold = np.clip(hold, 0.05, 1.05)
-            dom_gross_M += ow_gross * hold * cal / 7.0
+            dom_gross_M += ow_gross * hold * cal_mult / 7.0
 
         dom_studio_M = dom_gross_M * STUDIO_SPLIT
 
         # IMAX revenue
-        imax = compute_imax_revenue(film, wm, rng, cfg=imax_cfg)
+        imax = compute_imax_revenue(film, wom_factor, rng, cfg=imax_cfg)
         imax_studio_M = imax["total"] * STUDIO_SPLIT
-        imax_revs.append(imax["total"])
+        imax_rev_samples.append(imax["total"])
 
         # Dolby revenue
-        dolby = compute_dolby_revenue(film, wm)
+        dolby = compute_dolby_revenue(film, wom_factor)
         dolby_studio_M = dolby["total"] * STUDIO_SPLIT
-        dolby_revs.append(dolby["total"])
+        dolby_rev_samples.append(dolby["total"])
 
         # International
-        intl_mult  = rng.normal(intl_mean, p["intl_mult_std"])
+        intl_mult  = rng.normal(intl_mean, film_params["intl_mult_std"])
         intl_mult  = max(0.5, intl_mult)
         intl_rev_M = dom_gross_M * intl_mult * STUDIO_SPLIT
 
         # Total & net profit
         total_studio_M = dom_studio_M + imax_studio_M + dolby_studio_M + intl_rev_M
-        cost_M = p["budget_M"] * (1 + p["mktg_phi"])
-        revenues.append(total_studio_M - cost_M)
+        cost_M = film_params["budget_M"] * (1 + film_params["mktg_phi"])
+        profit_samples.append(total_studio_M - cost_M)
 
-    arr = np.array(revenues)
+    profit_arr = np.array(profit_samples)
     return {
-        "profits":       arr,
-        "p10":           float(np.percentile(arr, 10)),  # 10th percentile – downside / pessimistic
-        "p50":           float(np.percentile(arr, 50)),
-        "p90":           float(np.percentile(arr, 90)),  # 90th percentile – upside / optimistic
-        "mean":          float(arr.mean()),
-        "breakeven_pct": float((arr > 0).mean() * 100),
-        "imax_rev_mean":  float(np.mean(imax_revs)),
-        "dolby_rev_mean": float(np.mean(dolby_revs)),
+        "profits":       profit_arr,
+        "p10":           float(np.percentile(profit_arr, 10)),  # 10th percentile — downside / pessimistic
+        "p50":           float(np.percentile(profit_arr, 50)),
+        "p90":           float(np.percentile(profit_arr, 90)),  # 90th percentile — upside / optimistic
+        "mean":          float(profit_arr.mean()),
+        "breakeven_pct": float((profit_arr > 0).mean() * 100),
+        "imax_rev_mean":  float(np.mean(imax_rev_samples)),
+        "dolby_rev_mean": float(np.mean(dolby_rev_samples)),
     }
 
 
@@ -377,19 +377,19 @@ def run_all_scenarios(
     polymarket_ow_odds: float = None,
 ) -> dict:
     results = {}
-    for sk, sc in SCENARIOS.items():
-        results[sk] = {}
+    for scenario_key, scenario in SCENARIOS.items():
+        results[scenario_key] = {}
         for film in ["DUNE", "AVENGERS"]:
             aud  = dune_aud  if film == "DUNE" else av_aud
             intl = dune_intl if film == "DUNE" else av_intl
-            results[sk][film] = run_monte_carlo(
+            results[scenario_key][film] = run_monte_carlo(
                 film,
-                scenario_key=sk,
+                scenario_key=scenario_key,
                 n=n,
                 seed=seed,
                 audience_override=aud,
                 intl_override=intl,
-                imax_cfg=sc["imax_cfg"],
+                imax_cfg=scenario["imax_cfg"],
                 spidey_tier=spidey_tier,
                 polymarket_ow_odds=polymarket_ow_odds,
             )

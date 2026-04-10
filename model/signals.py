@@ -672,13 +672,13 @@ def fetch_polymarket_signals() -> dict:
                 pass
 
         if not result:
-            fb = dict(POLYMARKET_FALLBACK)
-            av_ow = fb.get("avengers_ow_odds")
-            av_fy = fb.get("avengers_full_year_odds")
+            fallback_data = dict(POLYMARKET_FALLBACK)
+            av_ow = fallback_data.get("avengers_ow_odds")
+            av_fy = fallback_data.get("avengers_full_year_odds")
             if av_ow and av_fy and av_fy > 0:
-                fb["ow_decay_ratio"] = round(av_ow / av_fy, 2)
+                fallback_data["ow_decay_ratio"] = round(av_ow / av_fy, 2)
             return {"status": "error", "message": "no data returned from Gamma API",
-                    **fb, "source": "fallback"}
+                    **fallback_data, "source": "fallback"}
 
         # Compute the legs-damage ratio
         av_ow  = result.get("avengers_ow_odds")
@@ -692,12 +692,12 @@ def fetch_polymarket_signals() -> dict:
         return result
 
     except Exception as e:
-        fb = dict(POLYMARKET_FALLBACK)
-        av_ow = fb.get("avengers_ow_odds")
-        av_fy = fb.get("avengers_full_year_odds")
+        fallback_data = dict(POLYMARKET_FALLBACK)
+        av_ow = fallback_data.get("avengers_ow_odds")
+        av_fy = fallback_data.get("avengers_full_year_odds")
         if av_ow and av_fy and av_fy > 0:
-            fb["ow_decay_ratio"] = round(av_ow / av_fy, 2)
-        return {"status": "error", "message": str(e), **fb, "source": "fallback"}
+            fallback_data["ow_decay_ratio"] = round(av_ow / av_fy, 2)
+        return {"status": "error", "message": str(e), **fallback_data, "source": "fallback"}
 
 
 def calibrate_from_polymarket(av_ow_odds: float, av_fy_odds: float) -> dict:
@@ -765,15 +765,15 @@ def fetch_and_calibrate(base_dune_score: int = 87, base_av_score: int = 88) -> d
     Gracefully falls back to hardcoded values on any failure.
     """
     signals = dict(FALLBACK_SIGNALS)  # start with fallback
-    av_adj  = 0.0
-    dune_adj = 0.0
+    av_score_adj   = 0.0
+    dune_score_adj = 0.0
     sources_used = []
 
     # ── 1. Teaser decay calibration ───────────────────────────────────────────
     av_decay_adj = calibrate_from_teaser_decay(
         signals["avengers"]["teaser_views_x_M"]
     )
-    av_adj += av_decay_adj
+    av_score_adj += av_decay_adj
     sources_used.append("Teaser decay curve")
 
     # ── 2. YouTube API ────────────────────────────────────────────────────────
@@ -808,18 +808,18 @@ def fetch_and_calibrate(base_dune_score: int = 87, base_av_score: int = 88) -> d
             if vid_id in dune_ids
         )
         if av_yt_total > 0:
-            av_adj   += calibrate_from_yt_views(av_yt_total, "AVENGERS")
+            av_score_adj   += calibrate_from_yt_views(av_yt_total, "AVENGERS")
             sources_used.append("YouTube API")
         if dune_yt_total > 0:
             if dune_t1_fresh:
                 # Day 1: use engagement ratio — can't compare hours-old views to 24h benchmarks
                 _dune_eng_adj = calibrate_from_trailer_engagement(dune_yt_total, dune_yt_likes)
-                # Map engagement tier → score adj for Dune (reuse existing thresholds)
+                # Map engagement tier → score adjustment for Dune (reuse existing thresholds)
                 _dune_eng_map = {"Blockbuster": +4.0, "Strong": +2.0,
                                  "Neutral": 0.0, "Soft": -2.0, "Disappoints": -4.0}
-                dune_adj += _dune_eng_map.get(_dune_eng_adj or "Neutral", 0.0)
+                dune_score_adj += _dune_eng_map.get(_dune_eng_adj or "Neutral", 0.0)
             else:
-                dune_adj += calibrate_from_yt_views(dune_yt_total, "DUNE")
+                dune_score_adj += calibrate_from_yt_views(dune_yt_total, "DUNE")
 
         signals["avengers"]["yt_trailer_views"]    = av_yt_total or None
         signals["avengers"]["yt_trailer_likes"]    = av_yt_likes or None
@@ -846,8 +846,8 @@ def fetch_and_calibrate(base_dune_score: int = 87, base_av_score: int = 88) -> d
             dune_wiki.get("last_7d_views"), dune_wiki.get("wow_pct"), "DUNE"
         )
 
-        av_adj   += av_wiki_adj
-        dune_adj += dune_wiki_adj
+        av_score_adj   += av_wiki_adj
+        dune_score_adj += dune_wiki_adj
         sources_used.append("Wikipedia")
 
         signals["avengers"]["wiki_views_7d"] = av_wiki.get("last_7d_views")
@@ -866,8 +866,8 @@ def fetch_and_calibrate(base_dune_score: int = 87, base_av_score: int = 88) -> d
         av_tmdb_adj   = calibrate_from_tmdb(av_tmdb.get("popularity"),   "AVENGERS")
         dune_tmdb_adj = calibrate_from_tmdb(dune_tmdb.get("popularity"), "DUNE")
 
-        av_adj   += av_tmdb_adj
-        dune_adj += dune_tmdb_adj
+        av_score_adj   += av_tmdb_adj
+        dune_score_adj += dune_tmdb_adj
         sources_used.append("TMDB")
 
         signals["avengers"]["tmdb_popularity"]   = av_tmdb.get("popularity")
@@ -887,8 +887,8 @@ def fetch_and_calibrate(base_dune_score: int = 87, base_av_score: int = 88) -> d
         av_trakt_adj   = calibrate_from_trakt(av_trakt.get("collectors"),   "AVENGERS")
         dune_trakt_adj = calibrate_from_trakt(dune_trakt.get("collectors"), "DUNE")
 
-        av_adj   += av_trakt_adj
-        dune_adj += dune_trakt_adj
+        av_score_adj   += av_trakt_adj
+        dune_score_adj += dune_trakt_adj
         sources_used.append("Trakt")
 
         signals["avengers"]["trakt_collectors"] = av_trakt.get("collectors")
@@ -903,11 +903,11 @@ def fetch_and_calibrate(base_dune_score: int = 87, base_av_score: int = 88) -> d
 
     # ── 6. Polymarket prediction market odds ──────────────────────────────────
     poly = fetch_polymarket_signals()
-    poly_calib = calibrate_from_polymarket(
+    poly_calibration = calibrate_from_polymarket(
         poly.get("avengers_ow_odds"),
         poly.get("avengers_full_year_odds"),
     )
-    av_adj += poly_calib["av_score_adj"]
+    av_score_adj += poly_calibration["av_score_adj"]
     sources_used.append("Polymarket" if poly.get("source") == "live" else "Polymarket (fallback)")
 
     signals["polymarket"] = {
@@ -915,8 +915,8 @@ def fetch_and_calibrate(base_dune_score: int = 87, base_av_score: int = 88) -> d
         "avengers_full_year_odds": poly.get("avengers_full_year_odds"),
         "dune_full_year_odds":     poly.get("dune_full_year_odds"),
         "ow_decay_ratio":          poly.get("ow_decay_ratio"),
-        "move_signal":             poly_calib["move_signal"],
-        "notes":                   poly_calib["notes"],
+        "move_signal":             poly_calibration["move_signal"],
+        "notes":                   poly_calibration["notes"],
         "source":                  poly.get("source", "fallback"),
         "fetched_at":              poly.get("fetched_at"),
     }
@@ -948,8 +948,8 @@ def fetch_and_calibrate(base_dune_score: int = 87, base_av_score: int = 88) -> d
         sources_used.append("Spider-Man trailer (YouTube)")
 
     # ── 8. Final calibrated scores ────────────────────────────────────────────
-    av_calibrated   = float(np.clip(base_av_score   + av_adj,   60, 100))
-    dune_calibrated = float(np.clip(base_dune_score + dune_adj, 60, 100))
+    av_calibrated   = float(np.clip(base_av_score   + av_score_adj,   60, 100))
+    dune_calibrated = float(np.clip(base_dune_score + dune_score_adj, 60, 100))
 
     # Signal confidence:
     #   high   — YouTube + Wikipedia + at least one of TMDB / Trakt
@@ -972,8 +972,8 @@ def fetch_and_calibrate(base_dune_score: int = 87, base_av_score: int = 88) -> d
     signals["calibration"] = {
         "avengers_base":        base_av_score,
         "dune_base":            base_dune_score,
-        "avengers_adj":         round(av_adj, 1),
-        "dune_adj":             round(dune_adj, 1),
+        "avengers_adj":         round(av_score_adj, 1),
+        "dune_adj":             round(dune_score_adj, 1),
         "avengers_calibrated":  av_calibrated,
         "dune_calibrated":      dune_calibrated,
         "sources":              sources_used,
@@ -982,20 +982,20 @@ def fetch_and_calibrate(base_dune_score: int = 87, base_av_score: int = 88) -> d
         "spidey_suggested_tier": spidey_suggested_tier,
         "spidey_trailer_fresh":  spidey_trailer_fresh,
         "dune_t1_fresh":         dune_t1_fresh,
-        "notes": _build_notes(av_adj, dune_adj, yt, spidey_suggested_tier),
+        "notes": _build_notes(av_score_adj, dune_score_adj, yt, spidey_suggested_tier),
     }
 
     return signals
 
 
-def _build_notes(av_adj, dune_adj, yt, spidey_tier=None) -> str:
+def _build_notes(av_score_adj, dune_score_adj, yt, spidey_tier=None) -> str:
     notes = []
-    if av_adj < -2:
-        notes.append(f"Avengers downgraded {av_adj:+.0f}pts — teaser decay matches Love&Thunder pattern.")
-    elif av_adj > 2:
-        notes.append(f"Avengers upgraded {av_adj:+.0f}pts — strong engagement signal.")
+    if av_score_adj < -2:
+        notes.append(f"Avengers downgraded {av_score_adj:+.0f}pts — teaser decay matches Love&Thunder pattern.")
+    elif av_score_adj > 2:
+        notes.append(f"Avengers upgraded {av_score_adj:+.0f}pts — strong engagement signal.")
     else:
-        notes.append("Avengers signal neutral — insufficient data for strong calibration.")
+        notes.append("Avengers signal neutral — not enough signal to move the needle yet.")
 
     if spidey_tier:
         notes.append(f"Spider-Man: BND trailer auto-suggests '{spidey_tier}' tier for MCU brand signal.")
