@@ -567,10 +567,10 @@ def calibrate_from_trakt(collectors: int, film: str) -> float:
 # Each event contains one Yes/No market per film.
 # The Yes price (0–1) is the crowd's implied probability.
 #
-# KEY INSIGHT: The gap between OW odds and full-year odds directly prices
-# the IMAX / legs damage from the Dec 18 conflict. Currently:
-#   Avengers OW: ~75%  Full-year: ~21%  → market expects a legs collapse
-# If Disney moved, the full-year odds would converge toward the OW odds.
+# KEY INSIGHT: The gap between opening weekend odds and full-year odds directly
+# prices the IMAX / legs damage from the Dec 18 conflict. Currently:
+#   Avengers opening weekend: ~75%  Full-year: ~21%  → market expects a legs collapse
+# If Disney moved, the full-year odds would converge toward the opening weekend odds.
 
 POLYMARKET_MARKET_SLUGS = {
     # Individual Yes/No market slugs from polymarket.com event URLs
@@ -603,7 +603,7 @@ def fetch_polymarket_signals() -> dict:
     any network failure.
 
     Returns dict with:
-      avengers_opening_weekend_odds        — P(Avengers has best OW in 2026)
+      avengers_opening_weekend_odds        — P(Avengers has best opening weekend in 2026)
       avengers_full_year_odds — P(Avengers is top grossing film in 2026)
       dune_full_year_odds     — P(Dune Part Three is top grossing film in 2026)
       opening_weekend_decay_ratio          — avengers_opening_weekend_odds / avengers_full_year_odds

@@ -274,7 +274,7 @@ def run_monte_carlo(
     imax_rev_samples  = []
     dolby_rev_samples = []
 
-    # Weekly decay holds (fraction of OW gross retained each week)
+    # Weekly decay holds (fraction of opening weekend gross retained each week)
     weekly_holds_base = [1.0, 0.56, 0.43, 0.34, 0.27, 0.22, 0.18]
 
     for trial in range(n):

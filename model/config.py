@@ -2,6 +2,14 @@
 dunesday/model/config.py
 All model assumptions in one place.
 Change here, everything downstream updates automatically.
+
+Abbreviations used throughout this codebase:
+  OW  — Opening Weekend (first 3 days of domestic theatrical release)
+  FY  — Full Year (calendar-year domestic gross)
+  WOM — Word of Mouth (audience satisfaction signal that affects weekly holds)
+  intl — International (revenue multiplier vs domestic gross)
+  PLF — Premium Large Format (e.g. Dolby Cinema, RPX)
+  P&A — Prints & Advertising (marketing cost)
 """
 import datetime
 
@@ -92,8 +100,8 @@ WOM_SLOPE     = 0.0199
 WOM_INTERCEPT = -0.7748
 
 # ── WEEKLY DECAY BENCHMARKS ───────────────────────────────────────────────────
-# Index = week number (0 = OW, 1 = wk2, ... 6 = wk7)
-# Values = fraction of OW gross retained that week
+# Index = week number (0 = opening weekend, 1 = week 2, ... 6 = week 7)
+# Values = fraction of opening weekend gross retained that week
 WEEKLY_DECAY_BENCHMARKS = {
     "Endgame (strong)":    [1.00, 0.68, 0.53, 0.41, 0.33, 0.26, 0.21],
     "D&W / held well":     [1.00, 0.62, 0.49, 0.38, 0.30, 0.24, 0.19],
@@ -123,7 +131,7 @@ SPIDEY_IMPACT_ADJ = {
     "Strong":      +2,   # MCU brand uplift, audiences primed
     "Blockbuster": +4,   # sets record — Avengers hype amplified
 }
-# Also affects Avengers OW gross multiplier via marketing saturation
+# Also affects Avengers opening weekend gross multiplier via marketing saturation
 SPIDEY_OW_MULT = {
     "Disappoints": 0.90,
     "Soft":        0.95,

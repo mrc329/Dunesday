@@ -410,7 +410,7 @@ with st.sidebar:
                     palette["dune"] if spidey_adj > 0 else palette["dim"])
     st.caption(
         f"MCU brand signal → Avengers score "
-        f"**{spidey_adj:+d} pts** · OW mult "
+        f"**{spidey_adj:+d} pts** · Opening Weekend mult "
         f"{'↑' if spidey_adj > 0 else '↓' if spidey_adj < 0 else '—'}"
     )
     _auto_tier = cal.get("spidey_suggested_tier")
@@ -1032,7 +1032,7 @@ with tab3:
         unsafe_allow_html=True,
     )
 
-    wk_labels = ["OW", "Wk 2", "Wk 3", "Wk 4", "Wk 5", "Wk 6", "Wk 7"]
+    wk_labels = ["Opening Weekend", "Wk 2", "Wk 3", "Wk 4", "Wk 5", "Wk 6", "Wk 7"]
 
     # Build projected curve from calibrated audience score via WOM
     from model.core import wom_mult as _wom_mult
@@ -1361,7 +1361,7 @@ with tab5:
     pm_c1.metric(
         "Avengers Best OW",
         f"{_poly_opening_weekend_odds:.0%}" if _poly_opening_weekend_odds else "—",
-        delta=(f"OW scalar {(1.05 if _poly_opening_weekend_odds >= 0.70 else 1.00 if _poly_opening_weekend_odds >= 0.50 else 0.90 if _poly_opening_weekend_odds >= 0.30 else 0.80):.2f}x in MC" if _poly_opening_weekend_odds else "OW scalar N/A"),
+        delta=(f"OW scalar {(1.05 if _poly_opening_weekend_odds >= 0.70 else 1.00 if _poly_opening_weekend_odds >= 0.50 else 0.90 if _poly_opening_weekend_odds >= 0.30 else 0.80):.2f}x in MC" if _poly_opening_weekend_odds else "Opening weekend scalar N/A"),
         help="Polymarket: probability Avengers has the best domestic opening weekend of 2026. "
              "This is a direct crowd signal on opening-weekend demand. "
              "Maps to an OW gross multiplier in the Monte Carlo: ≥70% → 1.05×, <30% → 0.80×.",
@@ -1376,11 +1376,11 @@ with tab5:
              "The low odds partly reflect timing, not just legs quality.",
     )
     pm_c3.metric(
-        "OW / Full-Year Ratio",
+        "Opening Weekend / Full-Year Ratio",
         f"{_poly_ratio:.1f}x" if _poly_ratio else "—",
         delta="Legs collapse signal",
         delta_color="inverse" if (_poly_ratio or 0) >= 3.0 else "off",
-        help="OW odds ÷ full-year odds. A high ratio means the crowd thinks Avengers opens "
+        help="Opening weekend odds ÷ full-year odds. A high ratio means the crowd thinks Avengers opens "
              "huge but underperforms over its full run — the IMAX legs collapse in one number. "
              "≥3.0× → STRONG move signal. 2.0–3.0× → moderate concern. <1.3× → market comfortable.",
     )
@@ -1421,7 +1421,7 @@ With $1.1M+ traded on these two markets, the signal carries meaningful weight.
 
 **Why the gap matters**
 
-The OW/FY ratio is **{f"{_poly_ratio:.1f}x" if _poly_ratio is not None else "—"}**. Avengers is the heavy favorite to open
+The opening weekend / full-year ratio is **{f"{_poly_ratio:.1f}x" if _poly_ratio is not None else "—"}**. Avengers is the heavy favorite to open
 biggest, but the crowd gives it only {f"{_poly_fy_odds:.0%}" if _poly_fy_odds is not None else "—"} to dominate the full year.
 That gap is the market pricing in the IMAX conflict: Avengers loses 400 IMAX
 screens for 21 days, while Dune banks Christmas on all of them.
@@ -1436,15 +1436,15 @@ not a pure legs signal. The ratio overstates the legs problem slightly, but the
 
 **How it enters the Monte Carlo**
 
-*Option A — OW scalar on opening weekend gross:*
-The OW odds ({f"{_poly_opening_weekend_odds:.0%}" if _poly_opening_weekend_odds is not None else "—"}) map to a **{f"{(1.05 if _poly_opening_weekend_odds >= 0.70 else 1.00 if _poly_opening_weekend_odds >= 0.50 else 0.90 if _poly_opening_weekend_odds >= 0.30 else 0.80):.2f}x" if _poly_opening_weekend_odds is not None else "—"}** applied to Avengers' mean
-opening-weekend gross in every trial. At 75% the crowd confirms a blockbuster
-opening — the model gets a +5% OW nudge. If odds fell to 40%, the model would
-apply a −10% OW penalty. This is the crowd acting as a real-money sentiment
+*Option A — Opening weekend scalar applied to opening weekend gross:*
+The opening weekend odds ({f"{_poly_opening_weekend_odds:.0%}" if _poly_opening_weekend_odds is not None else "—"}) map to a **{f"{(1.05 if _poly_opening_weekend_odds >= 0.70 else 1.00 if _poly_opening_weekend_odds >= 0.50 else 0.90 if _poly_opening_weekend_odds >= 0.30 else 0.80):.2f}x" if _poly_opening_weekend_odds is not None else "—"}** applied to Avengers' mean
+opening weekend gross in every trial. At 75% the crowd confirms a blockbuster
+opening — the model gets a +5% nudge. If odds fell to 40%, the model would
+apply a −10% penalty. This is the crowd acting as a real-money sentiment
 check on the $240M base assumption.
 
 *Option B — Scenario weights:*
-The OW/FY ratio ({f"{_poly_ratio:.1f}x" if _poly_ratio is not None else "—"}) maps to how much financial merit each scenario
+The opening weekend / full-year ratio ({f"{_poly_ratio:.1f}x" if _poly_ratio is not None else "—"}) maps to how much financial merit each scenario
 has, weighted by what the market is implicitly pricing. At {f"{_poly_ratio:.1f}x" if _poly_ratio is not None else "—"}:
 
 | Scenario | Weight | Avengers P50 |
@@ -1797,7 +1797,7 @@ f"<div><div style='font-size:0.62rem;color:{palette['dim']};letter-spacing:1px;m
     for wk_idx, hold in enumerate(decay_base):
         label = "Week 0 — Opening Day / Premiere" if wk_idx == 0 else f"Week {wk_idx}"
         decay_rows.append((label, f"{hold:.0%}"))
-    df_decay = pd.DataFrame(decay_rows, columns=["Week", "Hold vs OW"])
+    df_decay = pd.DataFrame(decay_rows, columns=["Week", "Hold vs Opening Weekend"])
     st.dataframe(df_decay, use_container_width=True, hide_index=True)
 
     st.caption(
@@ -1836,7 +1836,7 @@ f"<div><div style='font-size:0.62rem;color:{palette['dim']};letter-spacing:1px;m
             1. Look up day-of-week baseline (Mon–Sun).<br>
             2. If the date matches a <code>HOLIDAY_OVERRIDES</code> entry, replace baseline.<br>
             3. Dec 28–30 are floored at 0.75× (post-Christmas lingering demand).<br>
-            4. Each day's gross = OW_gross × hold_wk × <b>cal_mult</b> / 7
+            4. Each day's gross = opening_weekend_gross × hold_wk × <b>cal_mult</b> / 7
             </div>
             """.strip(),
             unsafe_allow_html=True,
@@ -1867,7 +1867,7 @@ f"<div><div style='font-size:0.62rem;color:{palette['dim']};letter-spacing:1px;m
         f"Draw a random opening weekend gross using the film's mean (adjusted for scenario, Spider-Man signal, and Polymarket odds) and standard deviation.<br>"
         f"<span style='color:{palette['dim']}; font-size:0.78rem;'>→ opening weekend gross ($M)</span><br><br>"
         f"<b style='color:{palette['dim']};'>Step 4 — Calculate domestic gross (days 1–45)</b><br>"
-        f"For each day: daily gross = OW gross × weekly hold fraction × WOM adjustment × calendar multiplier ÷ 7.<br>"
+        f"For each day: daily gross = opening weekend gross × weekly hold fraction × WOM adjustment × calendar multiplier ÷ 7.<br>"
         f"Sum across all 45 days, then apply the studio revenue split.<br>"
         f"<span style='color:{palette['dim']}; font-size:0.78rem;'>→ studio domestic gross ($M)</span><br><br>"
         f"<b style='color:{palette['dim']};'>Step 5 — Calculate IMAX revenue</b><br>"
@@ -1898,10 +1898,10 @@ f"<div><div style='font-size:0.62rem;color:{palette['dim']};letter-spacing:1px;m
 
     st.markdown(f"<hr style='border-color:{palette['card_rule']}; margin:14px 0;'>", unsafe_allow_html=True)
 
-    # ── SECTION G: SCENARIO OW ADJUSTMENTS ────────────────────────────────────
+    # ── SECTION G: SCENARIO OPENING WEEKEND ADJUSTMENTS ──────────────────────
     st.markdown(
         f"<p style='font-size:0.62rem; letter-spacing:2px; color:{palette['dim']}; margin-bottom:8px;'>"
-        "G · SCENARIO OW MULTIPLIERS</p>",
+        "G · SCENARIO OPENING WEEKEND MULTIPLIERS</p>",
         unsafe_allow_html=True,
     )
 
@@ -1910,11 +1910,11 @@ f"<div><div style='font-size:0.62rem;color:{palette['dim']};letter-spacing:1px;m
     for (film, sk), mult in SCENARIO_OPENING_WEEKEND_ADJ.items():
         scen_rows.append((SCENARIOS[sk]["label"], film.title(), f"{mult:.2f}×",
                           SCENARIOS[sk]["description"]))
-    df_scen = pd.DataFrame(scen_rows, columns=["Scenario", "Film", "OW Gross Multiplier", "Description"])
+    df_scen = pd.DataFrame(scen_rows, columns=["Scenario", "Film", "Opening Weekend Gross Multiplier", "Description"])
     st.dataframe(df_scen, use_container_width=True, hide_index=True)
 
     st.caption(
-        "Scenario OW multiplier is applied to opening_weekend_gross_mean_M before sampling. "
+        "Scenario opening weekend multiplier is applied to opening_weekend_gross_mean_M before sampling. "
         "E.g. Avengers in Scenario B gets 1.22× — a $240M mean becomes $293M mean — "
         "reflecting uncontested May holiday positioning."
     )
