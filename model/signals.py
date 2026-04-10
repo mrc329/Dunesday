@@ -49,12 +49,13 @@ FALLBACK_SIGNALS = {
         "wiki_wow_pct":      None,  # week-over-week % change
     },
     "dune": {
-        "yt_trailer_views":  None,
-        "full_trailer_out":  False,
-        "trailer_date":      "2026-03-18",
-        "alamo_rank":        1,
-        "wiki_views_7d":     None,
-        "wiki_wow_pct":      None,
+        "yt_trailer_views":    None,
+        "full_trailer_out":    False,
+        "trailer_date":        "2026-03-18",
+        "alamo_rank":          1,
+        "wiki_views_7d":       None,
+        "wiki_wow_pct":        None,
+        "imax_70mm_sold_out":  True,    # confirmed Apr 2026 — all US 70mm IMAX dates gone
     },
     "spiderman": {
         "full_trailer_released": True,
@@ -162,6 +163,27 @@ def calibrate_from_spidey_trailer(views_M: float) -> str:
     elif views_M >= 110:  return "Neutral"        # matches FFH baseline
     elif views_M >= 60:   return "Soft"           # below Homecoming level
     else:                 return "Disappoints"    # MCU fatigue confirmed
+
+
+def calibrate_from_imax_70mm_sellout(sold_out: bool, film: str) -> float:
+    """
+    Audience score adjustment from 70mm IMAX advance ticket sellout.
+
+    A full 70mm IMAX sellout before the full trailer drop is unusually strong —
+    it means the film's hardcore cinephile base has already committed real money
+    with almost no marketing. That audience is the same one that drives Dune's
+    high audience scores and repeat-viewing holds.
+
+    Dune Part Two sold out 70mm in <48hrs after its first trailer. Part Three
+    selling out with only a teaser is a meaningfully stronger signal at the
+    same stage of the release cycle.
+
+    Only applies to Dune — Avengers doesn't get 70mm allocation (IMAX Digital).
+    Returns: float adjustment to add to base audience score
+    """
+    if not sold_out or film != "DUNE":
+        return 0.0
+    return +2.0   # cinephile core locked in — stronger than Alamo #1 signal
 
 
 def calibrate_from_trailer_engagement(views: int, likes: int) -> str | None:
@@ -947,7 +969,14 @@ def fetch_and_calibrate(base_dune_score: int = 87, base_av_score: int = 88) -> d
         signals["spiderman"]["suggested_tier"] = spidey_suggested_tier
         sources_used.append("Spider-Man trailer (YouTube)")
 
-    # ── 8. Final calibrated scores ────────────────────────────────────────────
+    # ── 8. 70mm IMAX sellout signal ───────────────────────────────────────────
+    imax_70mm_sold_out = signals.get("dune", {}).get("imax_70mm_sold_out", False)
+    imax_sellout_adj   = calibrate_from_imax_70mm_sellout(imax_70mm_sold_out, "DUNE")
+    if imax_sellout_adj != 0:
+        dune_score_adj += imax_sellout_adj
+        sources_used.append("70mm IMAX sellout")
+
+    # ── 9. Final calibrated scores ────────────────────────────────────────────
     av_calibrated   = float(np.clip(base_av_score   + av_score_adj,   60, 100))
     dune_calibrated = float(np.clip(base_dune_score + dune_score_adj, 60, 100))
 
@@ -982,13 +1011,15 @@ def fetch_and_calibrate(base_dune_score: int = 87, base_av_score: int = 88) -> d
         "spidey_suggested_tier": spidey_suggested_tier,
         "spidey_trailer_fresh":  spidey_trailer_fresh,
         "dune_t1_fresh":         dune_t1_fresh,
-        "notes": _build_notes(av_score_adj, dune_score_adj, yt, spidey_suggested_tier),
+        "imax_70mm_sold_out":    imax_70mm_sold_out,
+        "imax_70mm_sellout_adj": imax_sellout_adj,
+        "notes": _build_notes(av_score_adj, dune_score_adj, yt, spidey_suggested_tier, imax_70mm_sold_out),
     }
 
     return signals
 
 
-def _build_notes(av_score_adj, dune_score_adj, yt, spidey_tier=None) -> str:
+def _build_notes(av_score_adj, dune_score_adj, yt, spidey_tier=None, imax_70mm_sold_out=False) -> str:
     notes = []
     if av_score_adj < -2:
         notes.append(f"Avengers downgraded {av_score_adj:+.0f}pts — teaser decay matches Love&Thunder pattern.")
@@ -1001,6 +1032,9 @@ def _build_notes(av_score_adj, dune_score_adj, yt, spidey_tier=None) -> str:
         notes.append(f"Spider-Man: BND trailer auto-suggests '{spidey_tier}' tier for MCU brand signal.")
     else:
         notes.append("Spider-Man: BND trailer released 2026-03-18 — set YOUTUBE_VIDEO_IDS['spiderman_full'] to enable auto-calibration.")
+
+    if imax_70mm_sold_out:
+        notes.append("Dune 70mm IMAX sold out — cinephile core committed before full trailer drop (+2pts).")
 
     if yt and yt.get("status") != "ok":
         notes.append("Add YOUTUBE_API_KEY to Streamlit secrets for live trailer view data.")

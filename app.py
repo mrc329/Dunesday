@@ -949,11 +949,23 @@ with tab3:
         else:
             st.info("No trailer released. WB following Part Two marketing cadence — strategic delay.")
 
-        _dune_m1, _dune_m2 = st.columns(2)
+        _imax_sold_out    = cal.get("imax_70mm_sold_out", False)
+        _imax_sellout_adj = cal.get("imax_70mm_sellout_adj", 0.0)
+
+        _dune_m1, _dune_m2, _dune_m3 = st.columns(3)
         _dune_m2.metric("Alamo poll", "#1 Most Anticipated", delta="14,000 respondents",
                         help="Alamo Drafthouse most-anticipated films survey. Dune ranked #1 among "
                              "14,000 respondents — a strong signal of art-house and cinephile demand, "
                              "the core audience that drives Dune's unusually high audience scores.")
+        _dune_m3.metric(
+            "70mm IMAX",
+            "Sold Out" if _imax_sold_out else "Available",
+            delta=f"{_imax_sellout_adj:+.0f}pts score" if _imax_sellout_adj else None,
+            help="70mm IMAX advance tickets for Dune: Part Three sold out across all US locations "
+                 "before the full trailer dropped (Apr 9 2026). Comparable signal: Dune Part Two "
+                 "sold out 70mm in <48hrs after trailer drop — Part Three matched that with only a "
+                 "teaser, indicating stronger early demand. Adds +2pts to Dune's audience score.",
+        )
 
         # Wikipedia pageviews
         _dune_wiki_7d  = dune_sig.get("wiki_views_7d")

@@ -185,6 +185,12 @@ HYPE_SIGNALS = {
         "trailer_date": "2026-03-18",   # Dune: Part Three teaser released 2026-03-18
         "alamo_poll_rank": 1,
         "alamo_poll_respondents": 14000,
+        # 70mm IMAX advance tickets sold out across all US locations — confirmed Apr 2026.
+        # No trailer, no full marketing push. Pure franchise demand from the cinephile core.
+        # Comparable signal: Dune Part Two sold out 70mm in <48hrs after trailer drop.
+        # Part Three sold out with only a teaser — stronger demand at equivalent stage.
+        "imax_70mm_sold_out": True,
+        "imax_70mm_sellout_date": "2026-04-09",
     },
     "spiderman": {
         # Spider-Man: Brand New Day — first trailer released 2026-03-18
