@@ -21,12 +21,12 @@ from model.config import (
 
 # ── POLYMARKET HELPERS ────────────────────────────────────────────────────────
 
-def polymarket_ow_scalar(ow_odds: float) -> float:
+def polymarket_opening_weekend_scalar(opening_weekend_odds: float) -> float:
     """
-    Map Polymarket opening-weekend-winner odds to an OW gross multiplier.
+    Map Polymarket opening-weekend-winner odds to an opening weekend gross multiplier.
 
-    The OW market asks: "Will Avengers have the best domestic opening weekend
-    in 2026?" The crowd price is a direct signal of conviction about the
+    The opening weekend market asks: "Will Avengers have the best domestic opening
+    weekend in 2026?" The crowd price is a direct signal of conviction about the
     size of Avengers' opening relative to all 2026 competition.
 
     Mapping:
@@ -35,20 +35,20 @@ def polymarket_ow_scalar(ow_odds: float) -> float:
       30–50% → 0.90x  (contested — soft opening risk)
       < 30%  → 0.80x  (market pricing in significant underperformance)
     """
-    if ow_odds is None:
+    if opening_weekend_odds is None:
         return 1.0
-    if ow_odds >= 0.70:   return 1.05
-    elif ow_odds >= 0.50: return 1.00
-    elif ow_odds >= 0.30: return 0.90
-    else:                 return 0.80
+    if opening_weekend_odds >= 0.70:   return 1.05
+    elif opening_weekend_odds >= 0.50: return 1.00
+    elif opening_weekend_odds >= 0.30: return 0.90
+    else:                              return 0.80
 
 
-def polymarket_scenario_weights(ow_decay_ratio: float) -> dict:
+def polymarket_scenario_weights(opening_weekend_decay_ratio: float) -> dict:
     """
-    Map the Polymarket OW/FY ratio to scenario probability weights and a
-    move recommendation for Disney.
+    Map the Polymarket opening-weekend/full-year ratio to scenario probability
+    weights and a move recommendation for Disney.
 
-    The OW/FY ratio = P(Avengers best OW) / P(Avengers best full-year gross).
+    The opening_weekend/full-year ratio = P(Avengers best opening weekend) / P(Avengers best full-year gross).
     A high ratio means the crowd thinks Avengers opens huge but then
     underperforms relative to its opening — the legs collapse the model
     predicts from losing IMAX for 21 days.
@@ -68,7 +68,7 @@ def polymarket_scenario_weights(ow_decay_ratio: float) -> dict:
       label            — human-readable summary
       weighted_p50_fn  — callable(results_dict) → float weighted expected P50
     """
-    if ow_decay_ratio is None:
+    if opening_weekend_decay_ratio is None:
         return {
             "weights":        {k: 0.25 for k in ["A_Both_Hold", "B_Disney_May",
                                                    "C_Disney_Jan", "D_WB_Moves"]},
@@ -76,26 +76,26 @@ def polymarket_scenario_weights(ow_decay_ratio: float) -> dict:
             "label":          "Insufficient Polymarket data — equal scenario weights",
         }
 
-    if ow_decay_ratio >= 3.0:
+    if opening_weekend_decay_ratio >= 3.0:
         weights = {"A_Both_Hold": 0.10, "B_Disney_May": 0.55,
                    "C_Disney_Jan": 0.35, "D_WB_Moves": 0.00}
         rec   = "move"
-        label = f"Ratio {ow_decay_ratio:.1f}x — market prices a major legs collapse. Move strongly favored."
-    elif ow_decay_ratio >= 2.0:
+        label = f"Ratio {opening_weekend_decay_ratio:.1f}x — market prices a major legs collapse. Move strongly favored."
+    elif opening_weekend_decay_ratio >= 2.0:
         weights = {"A_Both_Hold": 0.25, "B_Disney_May": 0.45,
                    "C_Disney_Jan": 0.30, "D_WB_Moves": 0.00}
         rec   = "lean_move"
-        label = f"Ratio {ow_decay_ratio:.1f}x — moderate legs concern. Move leans favorable."
-    elif ow_decay_ratio >= 1.3:
+        label = f"Ratio {opening_weekend_decay_ratio:.1f}x — moderate legs concern. Move leans favorable."
+    elif opening_weekend_decay_ratio >= 1.3:
         weights = {"A_Both_Hold": 0.50, "B_Disney_May": 0.30,
                    "C_Disney_Jan": 0.20, "D_WB_Moves": 0.00}
         rec   = "neutral"
-        label = f"Ratio {ow_decay_ratio:.1f}x — mild legs concern. Hold or move roughly balanced."
+        label = f"Ratio {opening_weekend_decay_ratio:.1f}x — mild legs concern. Hold or move roughly balanced."
     else:
         weights = {"A_Both_Hold": 0.70, "B_Disney_May": 0.20,
                    "C_Disney_Jan": 0.10, "D_WB_Moves": 0.00}
         rec   = "hold"
-        label = f"Ratio {ow_decay_ratio:.1f}x — market comfortable with legs. Hold favored."
+        label = f"Ratio {opening_weekend_decay_ratio:.1f}x — market comfortable with legs. Hold favored."
 
     return {"weights": weights, "recommendation": rec, "label": label}
 
@@ -228,9 +228,9 @@ def imax_gap_summary() -> dict:
 
 
 # ── MONTE CARLO ──────────────────────────────────────────────────────────────
-# Scenario-level OW adjustments (vs contested Dec 18 baseline)
-SCENARIO_OW_ADJ = {
-    # (film, scenario_key): multiplier on ow_gross_mean_M
+# Scenario-level opening weekend adjustments (vs contested Dec 18 baseline)
+SCENARIO_OPENING_WEEKEND_ADJ = {
+    # (film, scenario_key): multiplier on opening_weekend_gross_mean_M
     ("DUNE",     "A_Both_Hold"):  1.00,
     ("DUNE",     "B_Disney_May"): 1.15,   # uncontested Dec 18, full IMAX
     ("DUNE",     "C_Disney_Jan"): 1.12,
@@ -242,6 +242,7 @@ SCENARIO_OW_ADJ = {
 }
 
 
+
 def run_monte_carlo(
     film: str,
     scenario_key: str = "A_Both_Hold",
@@ -251,7 +252,7 @@ def run_monte_carlo(
     intl_override: float = None,
     imax_cfg: dict = None,
     spidey_tier: str = "Neutral",
-    polymarket_ow_odds: float = None,
+    polymarket_opening_weekend_odds: float = None,
 ) -> dict:
     """
     Monte Carlo simulation for a single film in a single scenario.
@@ -264,10 +265,10 @@ def run_monte_carlo(
 
     aud_mean  = audience_override if audience_override is not None else film_params["audience_mean"]
     intl_mean = intl_override     if intl_override     is not None else film_params["intl_mult_mean"]
-    ow_adj    = SCENARIO_OW_ADJ.get((film, scenario_key), 1.0)
+    opening_weekend_adj = SCENARIO_OPENING_WEEKEND_ADJ.get((film, scenario_key), 1.0)
     if film == "AVENGERS":
-        ow_adj *= SPIDEY_OW_MULT.get(spidey_tier, 1.0)
-        ow_adj *= polymarket_ow_scalar(polymarket_ow_odds)
+        opening_weekend_adj *= SPIDEY_OW_MULT.get(spidey_tier, 1.0)
+        opening_weekend_adj *= polymarket_opening_weekend_scalar(polymarket_opening_weekend_odds)
 
     profit_samples   = []
     imax_rev_samples  = []
@@ -282,8 +283,12 @@ def run_monte_carlo(
         wom_factor = np.clip(wom_mult(aud_score), 0.5, 1.5)
 
         # Opening weekend draw
-        ow_gross = rng.normal(film_params["ow_gross_mean_M"] * ow_adj, film_params["ow_gross_std_M"] * ow_adj)
-        ow_gross = max(ow_gross, film_params["ow_gross_mean_M"] * ow_adj * 0.3)
+        opening_weekend_gross = rng.normal(
+            film_params["opening_weekend_gross_mean_M"] * opening_weekend_adj,
+            film_params["opening_weekend_gross_std_M"]  * opening_weekend_adj,
+        )
+        opening_weekend_gross = max(opening_weekend_gross,
+                                    film_params["opening_weekend_gross_mean_M"] * opening_weekend_adj * 0.3)
 
         # 45-day domestic gross with calendar + decay
         dom_gross_M = 0.0
@@ -295,7 +300,7 @@ def run_monte_carlo(
             if week_idx >= 1:
                 hold = hold * np.clip(wom_factor, 0.6, 1.4)
                 hold = np.clip(hold, 0.05, 1.05)
-            dom_gross_M += ow_gross * hold * cal_mult / 7.0
+            dom_gross_M += opening_weekend_gross * hold * cal_mult / 7.0
 
         dom_studio_M = dom_gross_M * STUDIO_SPLIT
 
@@ -374,7 +379,7 @@ def run_all_scenarios(
     dune_intl: float = None,
     av_intl: float = None,
     spidey_tier: str = "Neutral",
-    polymarket_ow_odds: float = None,
+    polymarket_opening_weekend_odds: float = None,
 ) -> dict:
     results = {}
     for scenario_key, scenario in SCENARIOS.items():
@@ -391,6 +396,6 @@ def run_all_scenarios(
                 intl_override=intl,
                 imax_cfg=scenario["imax_cfg"],
                 spidey_tier=spidey_tier,
-                polymarket_ow_odds=polymarket_ow_odds,
+                polymarket_opening_weekend_odds=polymarket_opening_weekend_odds,
             )
     return results

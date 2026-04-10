@@ -66,7 +66,7 @@ DOLBY_DAILY_BASE_M = 1.6
 # ── FILM PARAMETERS ───────────────────────────────────────────────────────────
 FILM_PARAMS = {
     "DUNE": dict(
-        ow_gross_mean_M=90,   ow_gross_std_M=18,
+        opening_weekend_gross_mean_M=90,   opening_weekend_gross_std_M=18,
         wk2_drop_mean=0.44,   wk2_drop_std=0.06,
         wk3_hold_mean=0.74,   wk3_hold_std=0.05,
         late_hold_mean=0.78,  late_hold_std=0.04,
@@ -75,7 +75,7 @@ FILM_PARAMS = {
         audience_mean=87,     audience_std=6,
     ),
     "AVENGERS": dict(
-        ow_gross_mean_M=240,  ow_gross_std_M=40,
+        opening_weekend_gross_mean_M=240,  opening_weekend_gross_std_M=40,
         wk2_drop_mean=0.40,   wk2_drop_std=0.05,
         wk3_hold_mean=0.77,   wk3_hold_std=0.04,
         late_hold_mean=0.80,  late_hold_std=0.03,

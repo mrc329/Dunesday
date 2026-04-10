@@ -14,7 +14,7 @@ from model.config import (FILM_PARAMS, IMAX_CONFIG,
                           SPIDEY_IMPACT_ADJ, WEEKLY_DECAY_BENCHMARKS,
                           DOLBY_CONFIG, DOLBY_DAILY_BASE_M)
 from model.core import (run_all_scenarios, imax_gap_summary, SCENARIOS,
-                        polymarket_scenario_weights)
+                        polymarket_scenario_weights, SCENARIO_OPENING_WEEKEND_ADJ)
 from model.signals import (fetch_and_calibrate, YOUTUBE_TRAILER_URLS,
                            YOUTUBE_VIDEO_IDS, fetch_youtube_views)
 
@@ -462,9 +462,9 @@ with st.sidebar:
 
 # ── RUN MODEL ─────────────────────────────────────────────────────────────────
 _poly_sig       = signals.get("polymarket", {})
-_poly_ow_odds   = _poly_sig.get("avengers_ow_odds")
+_poly_opening_weekend_odds   = _poly_sig.get("avengers_opening_weekend_odds")
 _poly_fy_odds   = _poly_sig.get("avengers_full_year_odds")
-_poly_ratio     = _poly_sig.get("ow_decay_ratio")
+_poly_ratio     = _poly_sig.get("opening_weekend_decay_ratio")
 _poly_move_sig  = _poly_sig.get("move_signal")
 _poly_source    = _poly_sig.get("source", "fallback")
 _poly_weights   = polymarket_scenario_weights(_poly_ratio)
@@ -475,7 +475,7 @@ with st.spinner("Running Monte Carlo..."):
         dune_aud=dune_aud, av_aud=av_aud,
         dune_intl=dune_intl, av_intl=av_intl,
         spidey_tier=spidey_tier,
-        polymarket_ow_odds=_poly_ow_odds,
+        polymarket_opening_weekend_odds=_poly_opening_weekend_odds,
     )
     imax = imax_gap_summary()
 
@@ -1360,8 +1360,8 @@ with tab5:
     pm_c1, pm_c2, pm_c3, pm_c4 = st.columns(4)
     pm_c1.metric(
         "Avengers Best OW",
-        f"{_poly_ow_odds:.0%}" if _poly_ow_odds else "—",
-        delta=(f"OW scalar {(1.05 if _poly_ow_odds >= 0.70 else 1.00 if _poly_ow_odds >= 0.50 else 0.90 if _poly_ow_odds >= 0.30 else 0.80):.2f}x in MC" if _poly_ow_odds else "OW scalar N/A"),
+        f"{_poly_opening_weekend_odds:.0%}" if _poly_opening_weekend_odds else "—",
+        delta=(f"OW scalar {(1.05 if _poly_opening_weekend_odds >= 0.70 else 1.00 if _poly_opening_weekend_odds >= 0.50 else 0.90 if _poly_opening_weekend_odds >= 0.30 else 0.80):.2f}x in MC" if _poly_opening_weekend_odds else "OW scalar N/A"),
         help="Polymarket: probability Avengers has the best domestic opening weekend of 2026. "
              "This is a direct crowd signal on opening-weekend demand. "
              "Maps to an OW gross multiplier in the Monte Carlo: ≥70% → 1.05×, <30% → 0.80×.",
@@ -1416,7 +1416,7 @@ With $1.1M+ traded on these two markets, the signal carries meaningful weight.
 
 | Market | Avengers odds | What it measures |
 |---|---|---|
-| Best opening weekend in 2026 | **{f"{_poly_ow_odds:.0%}" if _poly_ow_odds is not None else "—"}** | Pure opening-weekend demand |
+| Best opening weekend in 2026 | **{f"{_poly_opening_weekend_odds:.0%}" if _poly_opening_weekend_odds is not None else "—"}** | Pure opening-weekend demand |
 | Highest full-year gross in 2026 | **{f"{_poly_fy_odds:.0%}" if _poly_fy_odds is not None else "—"}** | Full domestic run (calendar year) |
 
 **Why the gap matters**
@@ -1437,7 +1437,7 @@ not a pure legs signal. The ratio overstates the legs problem slightly, but the
 **How it enters the Monte Carlo**
 
 *Option A — OW scalar on opening weekend gross:*
-The OW odds ({f"{_poly_ow_odds:.0%}" if _poly_ow_odds is not None else "—"}) map to a **{f"{(1.05 if _poly_ow_odds >= 0.70 else 1.00 if _poly_ow_odds >= 0.50 else 0.90 if _poly_ow_odds >= 0.30 else 0.80):.2f}x" if _poly_ow_odds is not None else "—"}** applied to Avengers' mean
+The OW odds ({f"{_poly_opening_weekend_odds:.0%}" if _poly_opening_weekend_odds is not None else "—"}) map to a **{f"{(1.05 if _poly_opening_weekend_odds >= 0.70 else 1.00 if _poly_opening_weekend_odds >= 0.50 else 0.90 if _poly_opening_weekend_odds >= 0.30 else 0.80):.2f}x" if _poly_opening_weekend_odds is not None else "—"}** applied to Avengers' mean
 opening-weekend gross in every trial. At 75% the crowd confirms a blockbuster
 opening — the model gets a +5% OW nudge. If odds fell to 40%, the model would
 apply a −10% OW penalty. This is the crowd acting as a real-money sentiment
@@ -1634,8 +1634,8 @@ f"<div><div style='font-size:0.62rem;color:{palette['dim']};letter-spacing:1px;m
 f"<div><div style='font-size:0.62rem;color:{palette['dim']};letter-spacing:1px;margin-bottom:2px;'>WINDOW</div><div style='font-size:1.25rem;font-weight:600;color:{palette['text']};'>45 days</div><div style='font-size:0.7rem;color:{palette['dim']};'>from opening date</div></div>"
 f"<div><div style='font-size:0.62rem;color:{palette['dim']};letter-spacing:1px;margin-bottom:2px;'>IMAX EXCLUSIVE</div><div style='font-size:1.25rem;font-weight:600;color:{palette['dune']};'>21 days</div><div style='font-size:0.7rem;color:{palette['dim']};'>Dune \u00b7 Dec 18 \u2013 Jan 7</div></div>"
 f"<div><div style='font-size:0.62rem;color:{palette['dim']};letter-spacing:1px;margin-bottom:2px;'>DOLBY CINEMA</div><div style='font-size:1.25rem;font-weight:600;color:{palette['av']};'>{DOLBY_CONFIG['avengers_screens']}/{DOLBY_CONFIG['total_screens']}</div><div style='font-size:0.7rem;color:{palette['dim']};'>Avengers screens \u00b7 no exclusive</div></div>"
-f"<div><div style='font-size:0.62rem;color:{palette['dim']};letter-spacing:1px;margin-bottom:2px;'>DUNE OW MEAN</div><div style='font-size:1.25rem;font-weight:600;color:{palette['dune']};'>${fp_dune['ow_gross_mean_M']:.0f}M</div><div style='font-size:0.7rem;color:{palette['dim']};'>\u00b1${fp_dune['ow_gross_std_M']:.0f}M \u03c3</div></div>"
-f"<div><div style='font-size:0.62rem;color:{palette['dim']};letter-spacing:1px;margin-bottom:2px;'>AVENGERS OW MEAN</div><div style='font-size:1.25rem;font-weight:600;color:{palette['av']};'>${fp_av['ow_gross_mean_M']:.0f}M</div><div style='font-size:0.7rem;color:{palette['dim']};'>\u00b1${fp_av['ow_gross_std_M']:.0f}M \u03c3</div></div>"
+f"<div><div style='font-size:0.62rem;color:{palette['dim']};letter-spacing:1px;margin-bottom:2px;'>DUNE OW MEAN</div><div style='font-size:1.25rem;font-weight:600;color:{palette['dune']};'>${fp_dune['opening_weekend_gross_mean_M']:.0f}M</div><div style='font-size:0.7rem;color:{palette['dim']};'>\u00b1${fp_dune['opening_weekend_gross_std_M']:.0f}M \u03c3</div></div>"
+f"<div><div style='font-size:0.62rem;color:{palette['dim']};letter-spacing:1px;margin-bottom:2px;'>AVENGERS OW MEAN</div><div style='font-size:1.25rem;font-weight:600;color:{palette['av']};'>${fp_av['opening_weekend_gross_mean_M']:.0f}M</div><div style='font-size:0.7rem;color:{palette['dim']};'>\u00b1${fp_av['opening_weekend_gross_std_M']:.0f}M \u03c3</div></div>"
 f"<div><div style='font-size:0.62rem;color:{palette['dim']};letter-spacing:1px;margin-bottom:2px;'>DUNE BUDGET</div><div style='font-size:1.25rem;font-weight:600;color:{palette['dune']};'>${fp_dune['budget_M']:.0f}M</div><div style='font-size:0.7rem;color:{palette['dim']};'>+{fp_dune['mktg_phi']:.0%} mktg \u2192 ${fp_dune['budget_M']*(1+fp_dune['mktg_phi']):.0f}M all-in</div></div>"
 f"<div><div style='font-size:0.62rem;color:{palette['dim']};letter-spacing:1px;margin-bottom:2px;'>AVENGERS BUDGET</div><div style='font-size:1.25rem;font-weight:600;color:{palette['av']};'>${fp_av['budget_M']:.0f}M</div><div style='font-size:0.7rem;color:{palette['dim']};'>+{fp_av['mktg_phi']:.0%} mktg \u2192 ${fp_av['budget_M']*(1+fp_av['mktg_phi']):.0f}M all-in</div></div>"
 "</div></div>"
@@ -1673,10 +1673,10 @@ f"<div><div style='font-size:0.62rem;color:{palette['dim']};letter-spacing:1px;m
     core_rows = [
         ("Release Date",                       "Dec 18, 2026",      "Dec 18, 2026",       "The date the movie comes out"),
         ("Simulation Window",                  "45 days",           "45 days",            "45 days is a typical length of release for a major Hollywood picture"),
-        ("Opening Weekend — Mean",             f"${fp_dune['ow_gross_mean_M']:.0f}M",
-                                               f"${fp_av['ow_gross_mean_M']:.0f}M",       "The mean of the opening weekend box office"),
-        ("Opening Weekend — Std Dev",          f"${fp_dune['ow_gross_std_M']:.0f}M",
-                                               f"${fp_av['ow_gross_std_M']:.0f}M",        "Standard deviation of the box office gross"),
+        ("Opening Weekend — Mean",             f"${fp_dune['opening_weekend_gross_mean_M']:.0f}M",
+                                               f"${fp_av['opening_weekend_gross_mean_M']:.0f}M",       "The mean of the opening weekend box office"),
+        ("Opening Weekend — Std Dev",          f"${fp_dune['opening_weekend_gross_std_M']:.0f}M",
+                                               f"${fp_av['opening_weekend_gross_std_M']:.0f}M",        "Standard deviation of the box office gross"),
         ("Production Budget",                  f"${fp_dune['budget_M']:.0f}M",
                                                f"${fp_av['budget_M']:.0f}M",              "How much it costs to make the movie"),
         ("Marketing Multiplier",               f"{fp_dune['mktg_phi']:.0%}",
@@ -1905,16 +1905,16 @@ f"<div><div style='font-size:0.62rem;color:{palette['dim']};letter-spacing:1px;m
         unsafe_allow_html=True,
     )
 
-    from model.core import SCENARIO_OW_ADJ
+    from model.core import SCENARIO_OPENING_WEEKEND_ADJ
     scen_rows = []
-    for (film, sk), mult in SCENARIO_OW_ADJ.items():
+    for (film, sk), mult in SCENARIO_OPENING_WEEKEND_ADJ.items():
         scen_rows.append((SCENARIOS[sk]["label"], film.title(), f"{mult:.2f}×",
                           SCENARIOS[sk]["description"]))
     df_scen = pd.DataFrame(scen_rows, columns=["Scenario", "Film", "OW Gross Multiplier", "Description"])
     st.dataframe(df_scen, use_container_width=True, hide_index=True)
 
     st.caption(
-        "Scenario OW multiplier is applied to ow_gross_mean_M before sampling. "
+        "Scenario OW multiplier is applied to opening_weekend_gross_mean_M before sampling. "
         "E.g. Avengers in Scenario B gets 1.22× — a $240M mean becomes $293M mean — "
         "reflecting uncontested May holiday positioning."
     )

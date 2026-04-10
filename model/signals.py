@@ -574,19 +574,19 @@ def calibrate_from_trakt(collectors: int, film: str) -> float:
 
 POLYMARKET_MARKET_SLUGS = {
     # Individual Yes/No market slugs from polymarket.com event URLs
-    "avengers_ow":        "will-avengers-doomsday-have-the-best-domestic-opening-weekend-in-2026",
+    "avengers_opening_weekend": "will-avengers-doomsday-have-the-best-domestic-opening-weekend-in-2026",
     "avengers_full_year": "will-avengers-doomsday-be-the-top-grossing-movie-of-2026",
     "dune_full_year":     "will-dune-part-three-be-the-top-grossing-movie-of-2026",
 }
 
 POLYMARKET_EVENT_SLUGS = {
-    "full_year": "highest-grossing-movie-in-2026",
-    "ow":        "which-movie-has-biggest-opening-weekend-in-2026",
+    "full_year":       "highest-grossing-movie-in-2026",
+    "opening_weekend": "which-movie-has-biggest-opening-weekend-in-2026",
 }
 
 # Hardcoded fallback odds (update manually when odds shift significantly)
 POLYMARKET_FALLBACK = {
-    "avengers_ow_odds":        0.75,   # 75% — best OW in 2026
+    "avengers_opening_weekend_odds": 0.75,   # 75% — best opening weekend in 2026
     "avengers_full_year_odds": 0.21,   # 21% — highest full-year gross in 2026
     "dune_full_year_odds":     None,   # not in top markets yet
     "last_updated":            "2026-03-18",
@@ -603,10 +603,10 @@ def fetch_polymarket_signals() -> dict:
     any network failure.
 
     Returns dict with:
-      avengers_ow_odds        — P(Avengers has best OW in 2026)
+      avengers_opening_weekend_odds        — P(Avengers has best OW in 2026)
       avengers_full_year_odds — P(Avengers is top grossing film in 2026)
       dune_full_year_odds     — P(Dune Part Three is top grossing film in 2026)
-      ow_decay_ratio          — avengers_ow_odds / avengers_full_year_odds
+      opening_weekend_decay_ratio          — avengers_opening_weekend_odds / avengers_full_year_odds
                                 (> 2.0 signals market expects a legs problem)
     """
     try:
@@ -642,8 +642,8 @@ def fetch_polymarket_signals() -> dict:
                     continue
 
                 if "avengers" in question or "doomsday" in question:
-                    if market_type == "ow":
-                        result["avengers_ow_odds"] = yes_price
+                    if market_type == "opening_weekend":
+                        result["avengers_opening_weekend_odds"] = yes_price
                     else:
                         result["avengers_full_year_odds"] = yes_price
                 elif "dune" in question:
@@ -652,7 +652,7 @@ def fetch_polymarket_signals() -> dict:
 
         # ── Strategy 2: individual market slugs for anything still missing ────
         needed = {
-            "avengers_ow_odds":        POLYMARKET_MARKET_SLUGS["avengers_ow"],
+            "avengers_opening_weekend_odds":        POLYMARKET_MARKET_SLUGS["avengers_opening_weekend"],
             "avengers_full_year_odds": POLYMARKET_MARKET_SLUGS["avengers_full_year"],
             "dune_full_year_odds":     POLYMARKET_MARKET_SLUGS["dune_full_year"],
         }
@@ -673,18 +673,18 @@ def fetch_polymarket_signals() -> dict:
 
         if not result:
             fallback_data = dict(POLYMARKET_FALLBACK)
-            av_ow = fallback_data.get("avengers_ow_odds")
+            av_opening_weekend = fallback_data.get("avengers_opening_weekend_odds")
             av_fy = fallback_data.get("avengers_full_year_odds")
-            if av_ow and av_fy and av_fy > 0:
-                fallback_data["ow_decay_ratio"] = round(av_ow / av_fy, 2)
+            if av_opening_weekend and av_fy and av_fy > 0:
+                fallback_data["opening_weekend_decay_ratio"] = round(av_opening_weekend / av_fy, 2)
             return {"status": "error", "message": "no data returned from Gamma API",
                     **fallback_data, "source": "fallback"}
 
         # Compute the legs-damage ratio
-        av_ow  = result.get("avengers_ow_odds")
+        av_opening_weekend  = result.get("avengers_opening_weekend_odds")
         av_fy  = result.get("avengers_full_year_odds")
-        if av_ow and av_fy and av_fy > 0:
-            result["ow_decay_ratio"] = round(av_ow / av_fy, 2)
+        if av_opening_weekend and av_fy and av_fy > 0:
+            result["opening_weekend_decay_ratio"] = round(av_opening_weekend / av_fy, 2)
 
         result["status"]     = "ok"
         result["source"]     = "live"
@@ -693,21 +693,21 @@ def fetch_polymarket_signals() -> dict:
 
     except Exception as e:
         fallback_data = dict(POLYMARKET_FALLBACK)
-        av_ow = fallback_data.get("avengers_ow_odds")
+        av_opening_weekend = fallback_data.get("avengers_opening_weekend_odds")
         av_fy = fallback_data.get("avengers_full_year_odds")
-        if av_ow and av_fy and av_fy > 0:
-            fallback_data["ow_decay_ratio"] = round(av_ow / av_fy, 2)
+        if av_opening_weekend and av_fy and av_fy > 0:
+            fallback_data["opening_weekend_decay_ratio"] = round(av_opening_weekend / av_fy, 2)
         return {"status": "error", "message": str(e), **fallback_data, "source": "fallback"}
 
 
-def calibrate_from_polymarket(av_ow_odds: float, av_fy_odds: float) -> dict:
+def calibrate_from_polymarket(av_opening_weekend_odds: float, av_fy_odds: float) -> dict:
     """
     Derive audience score adjustments and a move-signal from Polymarket odds.
 
     OW odds  → small Avengers audience score adjustment (crowd's OW conviction)
     FY odds  → surfaces the legs problem; NOT fed into audience score directly
                (IMAX damage is already modeled separately in core.py)
-    Ratio    → ow_decay_ratio > 2.5 is a strong "market expects legs collapse" signal
+    Ratio    → opening_weekend_decay_ratio > 2.5 is a strong "market expects legs collapse" signal
 
     Returns:
       av_score_adj  — float, added to Avengers audience score
@@ -718,19 +718,19 @@ def calibrate_from_polymarket(av_ow_odds: float, av_fy_odds: float) -> dict:
     move_signal  = None
     notes        = []
 
-    if av_ow_odds is not None:
-        if av_ow_odds >= 0.65:
+    if av_opening_weekend_odds is not None:
+        if av_opening_weekend_odds >= 0.65:
             av_score_adj = +1.5
-            notes.append(f"Polymarket OW: {av_ow_odds:.0%} — market confirms Avengers as dominant opener.")
-        elif av_ow_odds >= 0.45:
+            notes.append(f"Polymarket OW: {av_opening_weekend_odds:.0%} — market confirms Avengers as dominant opener.")
+        elif av_opening_weekend_odds >= 0.45:
             av_score_adj = 0.0
-            notes.append(f"Polymarket OW: {av_ow_odds:.0%} — neutral OW signal.")
+            notes.append(f"Polymarket OW: {av_opening_weekend_odds:.0%} — neutral OW signal.")
         else:
             av_score_adj = -2.0
-            notes.append(f"Polymarket OW: {av_ow_odds:.0%} — soft OW signal, MCU fatigue priced in.")
+            notes.append(f"Polymarket OW: {av_opening_weekend_odds:.0%} — soft OW signal, MCU fatigue priced in.")
 
-    if av_ow_odds and av_fy_odds and av_fy_odds > 0:
-        ratio = av_ow_odds / av_fy_odds
+    if av_opening_weekend_odds and av_fy_odds and av_fy_odds > 0:
+        ratio = av_opening_weekend_odds / av_fy_odds
         if ratio >= 3.0:
             move_signal = "move"
             notes.append(
@@ -904,17 +904,17 @@ def fetch_and_calibrate(base_dune_score: int = 87, base_av_score: int = 88) -> d
     # ── 6. Polymarket prediction market odds ──────────────────────────────────
     poly = fetch_polymarket_signals()
     poly_calibration = calibrate_from_polymarket(
-        poly.get("avengers_ow_odds"),
+        poly.get("avengers_opening_weekend_odds"),
         poly.get("avengers_full_year_odds"),
     )
     av_score_adj += poly_calibration["av_score_adj"]
     sources_used.append("Polymarket" if poly.get("source") == "live" else "Polymarket (fallback)")
 
     signals["polymarket"] = {
-        "avengers_ow_odds":        poly.get("avengers_ow_odds"),
+        "avengers_opening_weekend_odds":        poly.get("avengers_opening_weekend_odds"),
         "avengers_full_year_odds": poly.get("avengers_full_year_odds"),
         "dune_full_year_odds":     poly.get("dune_full_year_odds"),
-        "ow_decay_ratio":          poly.get("ow_decay_ratio"),
+        "opening_weekend_decay_ratio":          poly.get("opening_weekend_decay_ratio"),
         "move_signal":             poly_calibration["move_signal"],
         "notes":                   poly_calibration["notes"],
         "source":                  poly.get("source", "fallback"),
