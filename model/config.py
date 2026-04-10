@@ -2,6 +2,14 @@
 dunesday/model/config.py
 All model assumptions in one place.
 Change here, everything downstream updates automatically.
+
+Abbreviations used throughout this codebase:
+  OW  — Opening Weekend (first 3 days of domestic theatrical release)
+  FY  — Full Year (calendar-year domestic gross)
+  WOM — Word of Mouth (audience satisfaction signal that affects weekly holds)
+  intl — International (revenue multiplier vs domestic gross)
+  PLF — Premium Large Format (e.g. Dolby Cinema, RPX)
+  P&A — Prints & Advertising (marketing cost)
 """
 import datetime
 
@@ -66,7 +74,7 @@ DOLBY_DAILY_BASE_M = 1.6
 # ── FILM PARAMETERS ───────────────────────────────────────────────────────────
 FILM_PARAMS = {
     "DUNE": dict(
-        ow_gross_mean_M=90,   ow_gross_std_M=18,
+        opening_weekend_gross_mean_M=90,   opening_weekend_gross_std_M=18,
         wk2_drop_mean=0.44,   wk2_drop_std=0.06,
         wk3_hold_mean=0.74,   wk3_hold_std=0.05,
         late_hold_mean=0.78,  late_hold_std=0.04,
@@ -75,7 +83,7 @@ FILM_PARAMS = {
         audience_mean=87,     audience_std=6,
     ),
     "AVENGERS": dict(
-        ow_gross_mean_M=240,  ow_gross_std_M=40,
+        opening_weekend_gross_mean_M=240,  opening_weekend_gross_std_M=40,
         wk2_drop_mean=0.40,   wk2_drop_std=0.05,
         wk3_hold_mean=0.77,   wk3_hold_std=0.04,
         late_hold_mean=0.80,  late_hold_std=0.03,
@@ -92,8 +100,8 @@ WOM_SLOPE     = 0.0199
 WOM_INTERCEPT = -0.7748
 
 # ── WEEKLY DECAY BENCHMARKS ───────────────────────────────────────────────────
-# Index = week number (0 = OW, 1 = wk2, ... 6 = wk7)
-# Values = fraction of OW gross retained that week
+# Index = week number (0 = opening weekend, 1 = week 2, ... 6 = week 7)
+# Values = fraction of opening weekend gross retained that week
 WEEKLY_DECAY_BENCHMARKS = {
     "Endgame (strong)":    [1.00, 0.68, 0.53, 0.41, 0.33, 0.26, 0.21],
     "D&W / held well":     [1.00, 0.62, 0.49, 0.38, 0.30, 0.24, 0.19],
@@ -123,7 +131,7 @@ SPIDEY_IMPACT_ADJ = {
     "Strong":      +2,   # MCU brand uplift, audiences primed
     "Blockbuster": +4,   # sets record — Avengers hype amplified
 }
-# Also affects Avengers OW gross multiplier via marketing saturation
+# Also affects Avengers opening weekend gross multiplier via marketing saturation
 SPIDEY_OW_MULT = {
     "Disappoints": 0.90,
     "Soft":        0.95,
@@ -177,6 +185,12 @@ HYPE_SIGNALS = {
         "trailer_date": "2026-03-18",   # Dune: Part Three teaser released 2026-03-18
         "alamo_poll_rank": 1,
         "alamo_poll_respondents": 14000,
+        # 70mm IMAX advance tickets sold out across all US locations — confirmed Apr 2026.
+        # No trailer, no full marketing push. Pure franchise demand from the cinephile core.
+        # Comparable signal: Dune Part Two sold out 70mm in <48hrs after trailer drop.
+        # Part Three sold out with only a teaser — stronger demand at equivalent stage.
+        "imax_70mm_sold_out": True,
+        "imax_70mm_sellout_date": "2026-04-09",
     },
     "spiderman": {
         # Spider-Man: Brand New Day — first trailer released 2026-03-18

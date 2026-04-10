@@ -49,12 +49,13 @@ FALLBACK_SIGNALS = {
         "wiki_wow_pct":      None,  # week-over-week % change
     },
     "dune": {
-        "yt_trailer_views":  None,
-        "full_trailer_out":  False,
-        "trailer_date":      "2026-03-18",
-        "alamo_rank":        1,
-        "wiki_views_7d":     None,
-        "wiki_wow_pct":      None,
+        "yt_trailer_views":    None,
+        "full_trailer_out":    False,
+        "trailer_date":        "2026-03-18",
+        "alamo_rank":          1,
+        "wiki_views_7d":       None,
+        "wiki_wow_pct":        None,
+        "imax_70mm_sold_out":  True,    # confirmed Apr 2026 — all US 70mm IMAX dates gone
     },
     "spiderman": {
         "full_trailer_released": True,
@@ -162,6 +163,27 @@ def calibrate_from_spidey_trailer(views_M: float) -> str:
     elif views_M >= 110:  return "Neutral"        # matches FFH baseline
     elif views_M >= 60:   return "Soft"           # below Homecoming level
     else:                 return "Disappoints"    # MCU fatigue confirmed
+
+
+def calibrate_from_imax_70mm_sellout(sold_out: bool, film: str) -> float:
+    """
+    Audience score adjustment from 70mm IMAX advance ticket sellout.
+
+    A full 70mm IMAX sellout before the full trailer drop is unusually strong —
+    it means the film's hardcore cinephile base has already committed real money
+    with almost no marketing. That audience is the same one that drives Dune's
+    high audience scores and repeat-viewing holds.
+
+    Dune Part Two sold out 70mm in <48hrs after its first trailer. Part Three
+    selling out with only a teaser is a meaningfully stronger signal at the
+    same stage of the release cycle.
+
+    Only applies to Dune — Avengers doesn't get 70mm allocation (IMAX Digital).
+    Returns: float adjustment to add to base audience score
+    """
+    if not sold_out or film != "DUNE":
+        return 0.0
+    return +2.0   # cinephile core locked in — stronger than Alamo #1 signal
 
 
 def calibrate_from_trailer_engagement(views: int, likes: int) -> str | None:
@@ -567,26 +589,26 @@ def calibrate_from_trakt(collectors: int, film: str) -> float:
 # Each event contains one Yes/No market per film.
 # The Yes price (0–1) is the crowd's implied probability.
 #
-# KEY INSIGHT: The gap between OW odds and full-year odds directly prices
-# the IMAX / legs damage from the Dec 18 conflict. Currently:
-#   Avengers OW: ~75%  Full-year: ~21%  → market expects a legs collapse
-# If Disney moved, the full-year odds would converge toward the OW odds.
+# KEY INSIGHT: The gap between opening weekend odds and full-year odds directly
+# prices the IMAX / legs damage from the Dec 18 conflict. Currently:
+#   Avengers opening weekend: ~75%  Full-year: ~21%  → market expects a legs collapse
+# If Disney moved, the full-year odds would converge toward the opening weekend odds.
 
 POLYMARKET_MARKET_SLUGS = {
     # Individual Yes/No market slugs from polymarket.com event URLs
-    "avengers_ow":        "will-avengers-doomsday-have-the-best-domestic-opening-weekend-in-2026",
+    "avengers_opening_weekend": "will-avengers-doomsday-have-the-best-domestic-opening-weekend-in-2026",
     "avengers_full_year": "will-avengers-doomsday-be-the-top-grossing-movie-of-2026",
     "dune_full_year":     "will-dune-part-three-be-the-top-grossing-movie-of-2026",
 }
 
 POLYMARKET_EVENT_SLUGS = {
-    "full_year": "highest-grossing-movie-in-2026",
-    "ow":        "which-movie-has-biggest-opening-weekend-in-2026",
+    "full_year":       "highest-grossing-movie-in-2026",
+    "opening_weekend": "which-movie-has-biggest-opening-weekend-in-2026",
 }
 
 # Hardcoded fallback odds (update manually when odds shift significantly)
 POLYMARKET_FALLBACK = {
-    "avengers_ow_odds":        0.75,   # 75% — best OW in 2026
+    "avengers_opening_weekend_odds": 0.75,   # 75% — best opening weekend in 2026
     "avengers_full_year_odds": 0.21,   # 21% — highest full-year gross in 2026
     "dune_full_year_odds":     None,   # not in top markets yet
     "last_updated":            "2026-03-18",
@@ -603,10 +625,10 @@ def fetch_polymarket_signals() -> dict:
     any network failure.
 
     Returns dict with:
-      avengers_ow_odds        — P(Avengers has best OW in 2026)
+      avengers_opening_weekend_odds        — P(Avengers has best opening weekend in 2026)
       avengers_full_year_odds — P(Avengers is top grossing film in 2026)
       dune_full_year_odds     — P(Dune Part Three is top grossing film in 2026)
-      ow_decay_ratio          — avengers_ow_odds / avengers_full_year_odds
+      opening_weekend_decay_ratio          — avengers_opening_weekend_odds / avengers_full_year_odds
                                 (> 2.0 signals market expects a legs problem)
     """
     try:
@@ -642,8 +664,8 @@ def fetch_polymarket_signals() -> dict:
                     continue
 
                 if "avengers" in question or "doomsday" in question:
-                    if market_type == "ow":
-                        result["avengers_ow_odds"] = yes_price
+                    if market_type == "opening_weekend":
+                        result["avengers_opening_weekend_odds"] = yes_price
                     else:
                         result["avengers_full_year_odds"] = yes_price
                 elif "dune" in question:
@@ -652,7 +674,7 @@ def fetch_polymarket_signals() -> dict:
 
         # ── Strategy 2: individual market slugs for anything still missing ────
         needed = {
-            "avengers_ow_odds":        POLYMARKET_MARKET_SLUGS["avengers_ow"],
+            "avengers_opening_weekend_odds":        POLYMARKET_MARKET_SLUGS["avengers_opening_weekend"],
             "avengers_full_year_odds": POLYMARKET_MARKET_SLUGS["avengers_full_year"],
             "dune_full_year_odds":     POLYMARKET_MARKET_SLUGS["dune_full_year"],
         }
@@ -672,19 +694,19 @@ def fetch_polymarket_signals() -> dict:
                 pass
 
         if not result:
-            fb = dict(POLYMARKET_FALLBACK)
-            av_ow = fb.get("avengers_ow_odds")
-            av_fy = fb.get("avengers_full_year_odds")
-            if av_ow and av_fy and av_fy > 0:
-                fb["ow_decay_ratio"] = round(av_ow / av_fy, 2)
+            fallback_data = dict(POLYMARKET_FALLBACK)
+            av_opening_weekend = fallback_data.get("avengers_opening_weekend_odds")
+            av_fy = fallback_data.get("avengers_full_year_odds")
+            if av_opening_weekend and av_fy and av_fy > 0:
+                fallback_data["opening_weekend_decay_ratio"] = round(av_opening_weekend / av_fy, 2)
             return {"status": "error", "message": "no data returned from Gamma API",
-                    **fb, "source": "fallback"}
+                    **fallback_data, "source": "fallback"}
 
         # Compute the legs-damage ratio
-        av_ow  = result.get("avengers_ow_odds")
+        av_opening_weekend  = result.get("avengers_opening_weekend_odds")
         av_fy  = result.get("avengers_full_year_odds")
-        if av_ow and av_fy and av_fy > 0:
-            result["ow_decay_ratio"] = round(av_ow / av_fy, 2)
+        if av_opening_weekend and av_fy and av_fy > 0:
+            result["opening_weekend_decay_ratio"] = round(av_opening_weekend / av_fy, 2)
 
         result["status"]     = "ok"
         result["source"]     = "live"
@@ -692,22 +714,22 @@ def fetch_polymarket_signals() -> dict:
         return result
 
     except Exception as e:
-        fb = dict(POLYMARKET_FALLBACK)
-        av_ow = fb.get("avengers_ow_odds")
-        av_fy = fb.get("avengers_full_year_odds")
-        if av_ow and av_fy and av_fy > 0:
-            fb["ow_decay_ratio"] = round(av_ow / av_fy, 2)
-        return {"status": "error", "message": str(e), **fb, "source": "fallback"}
+        fallback_data = dict(POLYMARKET_FALLBACK)
+        av_opening_weekend = fallback_data.get("avengers_opening_weekend_odds")
+        av_fy = fallback_data.get("avengers_full_year_odds")
+        if av_opening_weekend and av_fy and av_fy > 0:
+            fallback_data["opening_weekend_decay_ratio"] = round(av_opening_weekend / av_fy, 2)
+        return {"status": "error", "message": str(e), **fallback_data, "source": "fallback"}
 
 
-def calibrate_from_polymarket(av_ow_odds: float, av_fy_odds: float) -> dict:
+def calibrate_from_polymarket(av_opening_weekend_odds: float, av_fy_odds: float) -> dict:
     """
     Derive audience score adjustments and a move-signal from Polymarket odds.
 
     OW odds  → small Avengers audience score adjustment (crowd's OW conviction)
     FY odds  → surfaces the legs problem; NOT fed into audience score directly
                (IMAX damage is already modeled separately in core.py)
-    Ratio    → ow_decay_ratio > 2.5 is a strong "market expects legs collapse" signal
+    Ratio    → opening_weekend_decay_ratio > 2.5 is a strong "market expects legs collapse" signal
 
     Returns:
       av_score_adj  — float, added to Avengers audience score
@@ -718,19 +740,19 @@ def calibrate_from_polymarket(av_ow_odds: float, av_fy_odds: float) -> dict:
     move_signal  = None
     notes        = []
 
-    if av_ow_odds is not None:
-        if av_ow_odds >= 0.65:
+    if av_opening_weekend_odds is not None:
+        if av_opening_weekend_odds >= 0.65:
             av_score_adj = +1.5
-            notes.append(f"Polymarket OW: {av_ow_odds:.0%} — market confirms Avengers as dominant opener.")
-        elif av_ow_odds >= 0.45:
+            notes.append(f"Polymarket OW: {av_opening_weekend_odds:.0%} — market confirms Avengers as dominant opener.")
+        elif av_opening_weekend_odds >= 0.45:
             av_score_adj = 0.0
-            notes.append(f"Polymarket OW: {av_ow_odds:.0%} — neutral OW signal.")
+            notes.append(f"Polymarket OW: {av_opening_weekend_odds:.0%} — neutral OW signal.")
         else:
             av_score_adj = -2.0
-            notes.append(f"Polymarket OW: {av_ow_odds:.0%} — soft OW signal, MCU fatigue priced in.")
+            notes.append(f"Polymarket OW: {av_opening_weekend_odds:.0%} — soft OW signal, MCU fatigue priced in.")
 
-    if av_ow_odds and av_fy_odds and av_fy_odds > 0:
-        ratio = av_ow_odds / av_fy_odds
+    if av_opening_weekend_odds and av_fy_odds and av_fy_odds > 0:
+        ratio = av_opening_weekend_odds / av_fy_odds
         if ratio >= 3.0:
             move_signal = "move"
             notes.append(
@@ -765,15 +787,15 @@ def fetch_and_calibrate(base_dune_score: int = 87, base_av_score: int = 88) -> d
     Gracefully falls back to hardcoded values on any failure.
     """
     signals = dict(FALLBACK_SIGNALS)  # start with fallback
-    av_adj  = 0.0
-    dune_adj = 0.0
+    av_score_adj   = 0.0
+    dune_score_adj = 0.0
     sources_used = []
 
     # ── 1. Teaser decay calibration ───────────────────────────────────────────
     av_decay_adj = calibrate_from_teaser_decay(
         signals["avengers"]["teaser_views_x_M"]
     )
-    av_adj += av_decay_adj
+    av_score_adj += av_decay_adj
     sources_used.append("Teaser decay curve")
 
     # ── 2. YouTube API ────────────────────────────────────────────────────────
@@ -808,18 +830,18 @@ def fetch_and_calibrate(base_dune_score: int = 87, base_av_score: int = 88) -> d
             if vid_id in dune_ids
         )
         if av_yt_total > 0:
-            av_adj   += calibrate_from_yt_views(av_yt_total, "AVENGERS")
+            av_score_adj   += calibrate_from_yt_views(av_yt_total, "AVENGERS")
             sources_used.append("YouTube API")
         if dune_yt_total > 0:
             if dune_t1_fresh:
                 # Day 1: use engagement ratio — can't compare hours-old views to 24h benchmarks
                 _dune_eng_adj = calibrate_from_trailer_engagement(dune_yt_total, dune_yt_likes)
-                # Map engagement tier → score adj for Dune (reuse existing thresholds)
+                # Map engagement tier → score adjustment for Dune (reuse existing thresholds)
                 _dune_eng_map = {"Blockbuster": +4.0, "Strong": +2.0,
                                  "Neutral": 0.0, "Soft": -2.0, "Disappoints": -4.0}
-                dune_adj += _dune_eng_map.get(_dune_eng_adj or "Neutral", 0.0)
+                dune_score_adj += _dune_eng_map.get(_dune_eng_adj or "Neutral", 0.0)
             else:
-                dune_adj += calibrate_from_yt_views(dune_yt_total, "DUNE")
+                dune_score_adj += calibrate_from_yt_views(dune_yt_total, "DUNE")
 
         signals["avengers"]["yt_trailer_views"]    = av_yt_total or None
         signals["avengers"]["yt_trailer_likes"]    = av_yt_likes or None
@@ -846,8 +868,8 @@ def fetch_and_calibrate(base_dune_score: int = 87, base_av_score: int = 88) -> d
             dune_wiki.get("last_7d_views"), dune_wiki.get("wow_pct"), "DUNE"
         )
 
-        av_adj   += av_wiki_adj
-        dune_adj += dune_wiki_adj
+        av_score_adj   += av_wiki_adj
+        dune_score_adj += dune_wiki_adj
         sources_used.append("Wikipedia")
 
         signals["avengers"]["wiki_views_7d"] = av_wiki.get("last_7d_views")
@@ -866,8 +888,8 @@ def fetch_and_calibrate(base_dune_score: int = 87, base_av_score: int = 88) -> d
         av_tmdb_adj   = calibrate_from_tmdb(av_tmdb.get("popularity"),   "AVENGERS")
         dune_tmdb_adj = calibrate_from_tmdb(dune_tmdb.get("popularity"), "DUNE")
 
-        av_adj   += av_tmdb_adj
-        dune_adj += dune_tmdb_adj
+        av_score_adj   += av_tmdb_adj
+        dune_score_adj += dune_tmdb_adj
         sources_used.append("TMDB")
 
         signals["avengers"]["tmdb_popularity"]   = av_tmdb.get("popularity")
@@ -887,8 +909,8 @@ def fetch_and_calibrate(base_dune_score: int = 87, base_av_score: int = 88) -> d
         av_trakt_adj   = calibrate_from_trakt(av_trakt.get("collectors"),   "AVENGERS")
         dune_trakt_adj = calibrate_from_trakt(dune_trakt.get("collectors"), "DUNE")
 
-        av_adj   += av_trakt_adj
-        dune_adj += dune_trakt_adj
+        av_score_adj   += av_trakt_adj
+        dune_score_adj += dune_trakt_adj
         sources_used.append("Trakt")
 
         signals["avengers"]["trakt_collectors"] = av_trakt.get("collectors")
@@ -903,20 +925,20 @@ def fetch_and_calibrate(base_dune_score: int = 87, base_av_score: int = 88) -> d
 
     # ── 6. Polymarket prediction market odds ──────────────────────────────────
     poly = fetch_polymarket_signals()
-    poly_calib = calibrate_from_polymarket(
-        poly.get("avengers_ow_odds"),
+    poly_calibration = calibrate_from_polymarket(
+        poly.get("avengers_opening_weekend_odds"),
         poly.get("avengers_full_year_odds"),
     )
-    av_adj += poly_calib["av_score_adj"]
+    av_score_adj += poly_calibration["av_score_adj"]
     sources_used.append("Polymarket" if poly.get("source") == "live" else "Polymarket (fallback)")
 
     signals["polymarket"] = {
-        "avengers_ow_odds":        poly.get("avengers_ow_odds"),
+        "avengers_opening_weekend_odds":        poly.get("avengers_opening_weekend_odds"),
         "avengers_full_year_odds": poly.get("avengers_full_year_odds"),
         "dune_full_year_odds":     poly.get("dune_full_year_odds"),
-        "ow_decay_ratio":          poly.get("ow_decay_ratio"),
-        "move_signal":             poly_calib["move_signal"],
-        "notes":                   poly_calib["notes"],
+        "opening_weekend_decay_ratio":          poly.get("opening_weekend_decay_ratio"),
+        "move_signal":             poly_calibration["move_signal"],
+        "notes":                   poly_calibration["notes"],
         "source":                  poly.get("source", "fallback"),
         "fetched_at":              poly.get("fetched_at"),
     }
@@ -947,9 +969,16 @@ def fetch_and_calibrate(base_dune_score: int = 87, base_av_score: int = 88) -> d
         signals["spiderman"]["suggested_tier"] = spidey_suggested_tier
         sources_used.append("Spider-Man trailer (YouTube)")
 
-    # ── 8. Final calibrated scores ────────────────────────────────────────────
-    av_calibrated   = float(np.clip(base_av_score   + av_adj,   60, 100))
-    dune_calibrated = float(np.clip(base_dune_score + dune_adj, 60, 100))
+    # ── 8. 70mm IMAX sellout signal ───────────────────────────────────────────
+    imax_70mm_sold_out = signals.get("dune", {}).get("imax_70mm_sold_out", False)
+    imax_sellout_adj   = calibrate_from_imax_70mm_sellout(imax_70mm_sold_out, "DUNE")
+    if imax_sellout_adj != 0:
+        dune_score_adj += imax_sellout_adj
+        sources_used.append("70mm IMAX sellout")
+
+    # ── 9. Final calibrated scores ────────────────────────────────────────────
+    av_calibrated   = float(np.clip(base_av_score   + av_score_adj,   60, 100))
+    dune_calibrated = float(np.clip(base_dune_score + dune_score_adj, 60, 100))
 
     # Signal confidence:
     #   high   — YouTube + Wikipedia + at least one of TMDB / Trakt
@@ -972,8 +1001,8 @@ def fetch_and_calibrate(base_dune_score: int = 87, base_av_score: int = 88) -> d
     signals["calibration"] = {
         "avengers_base":        base_av_score,
         "dune_base":            base_dune_score,
-        "avengers_adj":         round(av_adj, 1),
-        "dune_adj":             round(dune_adj, 1),
+        "avengers_adj":         round(av_score_adj, 1),
+        "dune_adj":             round(dune_score_adj, 1),
         "avengers_calibrated":  av_calibrated,
         "dune_calibrated":      dune_calibrated,
         "sources":              sources_used,
@@ -982,25 +1011,30 @@ def fetch_and_calibrate(base_dune_score: int = 87, base_av_score: int = 88) -> d
         "spidey_suggested_tier": spidey_suggested_tier,
         "spidey_trailer_fresh":  spidey_trailer_fresh,
         "dune_t1_fresh":         dune_t1_fresh,
-        "notes": _build_notes(av_adj, dune_adj, yt, spidey_suggested_tier),
+        "imax_70mm_sold_out":    imax_70mm_sold_out,
+        "imax_70mm_sellout_adj": imax_sellout_adj,
+        "notes": _build_notes(av_score_adj, dune_score_adj, yt, spidey_suggested_tier, imax_70mm_sold_out),
     }
 
     return signals
 
 
-def _build_notes(av_adj, dune_adj, yt, spidey_tier=None) -> str:
+def _build_notes(av_score_adj, dune_score_adj, yt, spidey_tier=None, imax_70mm_sold_out=False) -> str:
     notes = []
-    if av_adj < -2:
-        notes.append(f"Avengers downgraded {av_adj:+.0f}pts — teaser decay matches Love&Thunder pattern.")
-    elif av_adj > 2:
-        notes.append(f"Avengers upgraded {av_adj:+.0f}pts — strong engagement signal.")
+    if av_score_adj < -2:
+        notes.append(f"Avengers downgraded {av_score_adj:+.0f}pts — teaser decay matches Love&Thunder pattern.")
+    elif av_score_adj > 2:
+        notes.append(f"Avengers upgraded {av_score_adj:+.0f}pts — strong engagement signal.")
     else:
-        notes.append("Avengers signal neutral — insufficient data for strong calibration.")
+        notes.append("Avengers signal neutral — not enough signal to move the needle yet.")
 
     if spidey_tier:
         notes.append(f"Spider-Man: BND trailer auto-suggests '{spidey_tier}' tier for MCU brand signal.")
     else:
         notes.append("Spider-Man: BND trailer released 2026-03-18 — set YOUTUBE_VIDEO_IDS['spiderman_full'] to enable auto-calibration.")
+
+    if imax_70mm_sold_out:
+        notes.append("Dune 70mm IMAX sold out — cinephile core committed before full trailer drop (+2pts).")
 
     if yt and yt.get("status") != "ok":
         notes.append("Add YOUTUBE_API_KEY to Streamlit secrets for live trailer view data.")
