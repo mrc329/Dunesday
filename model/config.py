@@ -164,7 +164,7 @@ DOW_MULTIPLIERS = {
 
 # ── HYPE SIGNALS (update manually until scraper is built) ────────────────────
 HYPE_SIGNALS = {
-    "last_updated": "2026-03-18",
+    "last_updated": "2026-08-05",
     "avengers": {
         "teaser_views": [
             {"label": "T1 Steve Rogers", "platform": "X", "views_M": 53.0, "estimated": False},
@@ -176,7 +176,15 @@ HYPE_SIGNALS = {
         "instagram_M": 505,
         "tiktok_M": 103,
         "social_vol_vs_avg_pct": 188,
-        "full_trailer_released": False,
+        # Full trailer dropped 2026-07-20, ahead of the Comic-Con panel. 503M
+        # combined views in 24hrs — Disney's biggest trailer launch ever,
+        # beating D&W's Super Bowl teaser (365M). Still #2 all-time behind
+        # Spider-Man: Brand New Day's 719M. Disney put advance tickets on
+        # sale same day: $16.5M in day-one presales. (Variety, Jul 2026)
+        "full_trailer_released": True,
+        "trailer_date": "2026-07-20",
+        "combined_views_M": 503.0,
+        "presale_day1_gross_M": 16.5,
     },
     "dune": {
         "teaser_views": [],
@@ -202,6 +210,13 @@ HYPE_SIGNALS = {
         "yt_trailer_views_M": 718.6,  # confirmed 24hr count (Hollywood Reporter / Variety)
         "combined_views_M": 718.6,    # all-platform 24hr total
         "suggested_tier": "Blockbuster",  # 718.6M >> 350M threshold; hardcoded fallback
+        # Opened ~2026-07-24: $927M global opening — 2nd-biggest OW ever
+        # behind Endgame's $1.22B, and 2nd-fastest film to $1B worldwide —
+        # with zero IMAX screens in North America. Disney CEO Josh D'Amaro
+        # said the result "bodes well" for Avengers: Doomsday. Confirms the
+        # Blockbuster tier called from trailer data. (Deadline, Aug 2026)
+        "opening_weekend_global_gross_M": 927,
+        "actual_result_confirms_tier": True,
     },
     "cinemacon_date": "2026-04-13",
     "disney_presentation_date": "2026-04-16",
