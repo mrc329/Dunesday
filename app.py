@@ -1138,6 +1138,7 @@ with tab3:
     _spidey_ratio_tab   = _spidey_sig_tab.get("yt_engagement_ratio")
     _spidey_tier_tab    = cal.get("spidey_suggested_tier") or _spidey_sig_tab.get("suggested_tier")
     _spidey_fresh       = cal.get("spidey_trailer_fresh", False)
+    _spidey_confirmed   = bool(_spidey_sig_tab.get("confirmed_tier"))
     _spidey_color = palette["av"] if _spidey_tier_tab in ("Disappoints", "Soft") else \
                     palette["dune"] if _spidey_tier_tab in ("Strong", "Blockbuster") else palette["mid_ref"]
 
@@ -1171,16 +1172,24 @@ with tab3:
     _sc4.metric(
         "Suggested impact tier",
         _spidey_tier_tab or "—",
-        delta="Via engagement ratio" if _spidey_fresh and _spidey_tier_tab else
+        delta="Confirmed box office" if _spidey_confirmed else
+              "Via engagement ratio" if _spidey_fresh and _spidey_tier_tab else
               "Via 24h view count" if _spidey_tier_tab else "MCU brand signal → Avengers score",
-        help="Auto-suggested tier for the sidebar Spider-Man slider based on trailer data. "
+        help="Tier for the sidebar Spider-Man slider. Once the film has released, this reflects "
+             "its confirmed box office outcome rather than a trailer-data projection. "
              "Each tier maps to an Avengers audience score adjustment and OW gross multiplier. "
-             "Override manually in the sidebar if you disagree with the auto-suggestion.",
+             "Override manually in the sidebar if you disagree.",
     )
     if _spidey_tier_tab:
         _ratio_pct = f"{_spidey_ratio_tab * 100:.1f}%" if _spidey_ratio_tab else "—"
-        _method    = "DAY-1 ENGAGEMENT RATIO" if _spidey_fresh else "AUTO-CALIBRATION"
+        _method    = "CONFIRMED BOX OFFICE" if _spidey_confirmed else \
+                     "DAY-1 ENGAGEMENT RATIO" if _spidey_fresh else "AUTO-CALIBRATION"
+        _global_b  = _spidey_sig_tab.get("global_gross_confirmed_B")
+        _global_b_str = f"${_global_b:.1f}B" if _global_b else "its confirmed total"
         _detail    = (
+            f"Crossed <b style='color:{_spidey_color}'>{_global_b_str}</b> global — confirms "
+            f"<b style='color:{_spidey_color}'>{_spidey_tier_tab}</b> tier for the MCU brand signal."
+            if _spidey_confirmed else
             f"Like/view ratio <b style='color:{_spidey_color}'>{_ratio_pct}</b> → "
             f"<b style='color:{_spidey_color}'>{_spidey_tier_tab}</b> tier. "
             "View-count benchmarks need 24 hours — ratio compares trailers released months apart."
