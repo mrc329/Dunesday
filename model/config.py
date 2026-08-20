@@ -164,7 +164,7 @@ DOW_MULTIPLIERS = {
 
 # ── HYPE SIGNALS (update manually until scraper is built) ────────────────────
 HYPE_SIGNALS = {
-    "last_updated": "2026-03-18",
+    "last_updated": "2026-08-20",
     "avengers": {
         "teaser_views": [
             {"label": "T1 Steve Rogers", "platform": "X", "views_M": 53.0, "estimated": False},
@@ -177,6 +177,17 @@ HYPE_SIGNALS = {
         "tiktok_M": 103,
         "social_vol_vs_avg_pct": 188,
         "full_trailer_released": False,
+        # Opening-weekend presale tracking, pacing 65% ahead of Spider-Man:
+        # Brand New Day at the same pre-release checkpoint — a confirmed $2B
+        # global comp (see spiderman.global_gross_confirmed_B below).
+        # Source: No Film School, Aug 2026.
+        "presale_pace_vs_spiderman_pct": 65,
+        # Disney is marketing Avengers' premium-large-format run as "Infinity
+        # Vision" after failing to secure any domestic IMAX screens for
+        # opening weekend. Modeled financially as the existing Dolby Cinema
+        # allocation (DOLBY_CONFIG) — same underlying screens, different
+        # studio branding. Source: No Film School, Aug 2026.
+        "premium_format_branding": "Infinity Vision",
     },
     "dune": {
         "teaser_views": [],
@@ -191,6 +202,14 @@ HYPE_SIGNALS = {
         # Part Three sold out with only a teaser — stronger demand at equivalent stage.
         "imax_70mm_sold_out": True,
         "imax_70mm_sellout_date": "2026-04-09",
+        # Second advance batch (70mm IMAX + PLF) sold out within hours; eBay
+        # resale hit $1,000/ticket. AMC and Fandango sites reportedly crashed
+        # under demand. Confirms the Apr sellout wasn't an inventory quirk.
+        # Source: No Film School, Aug 2026.
+        "imax_70mm_second_wave_sold_out": True,
+        "imax_70mm_second_wave_date": "2026-08-19",
+        "secondary_market_price_usd": 1000,
+        "ticketing_site_crash_reported": True,
     },
     "spiderman": {
         # Spider-Man: Brand New Day — first trailer released 2026-03-18
@@ -202,6 +221,10 @@ HYPE_SIGNALS = {
         "yt_trailer_views_M": 718.6,  # confirmed 24hr count (Hollywood Reporter / Variety)
         "combined_views_M": 718.6,    # all-platform 24hr total
         "suggested_tier": "Blockbuster",  # 718.6M >> 350M threshold; hardcoded fallback
+        # Confirmed outcome as of Aug 2026 — crossed $2B global box office,
+        # validating the Blockbuster tier as a real result rather than a
+        # trailer-view projection. Source: No Film School, Aug 2026.
+        "global_gross_confirmed_B": 2.0,
     },
     "cinemacon_date": "2026-04-13",
     "disney_presentation_date": "2026-04-16",

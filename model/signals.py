@@ -38,7 +38,7 @@ def _is_fresh_trailer(date_str: str) -> bool:
 
 
 FALLBACK_SIGNALS = {
-    "last_updated":  "2026-02-26",
+    "last_updated":  "2026-08-19",
     "source":        "fallback",
     "avengers": {
         "yt_trailer_views":  None,  # YouTube view count (full trailer not out yet)
@@ -47,6 +47,10 @@ FALLBACK_SIGNALS = {
         "full_trailer_out":  False,
         "wiki_views_7d":     None,  # Wikipedia pageviews last 7 days
         "wiki_wow_pct":      None,  # week-over-week % change
+        # Presale pacing vs Spider-Man: Brand New Day at the same pre-release
+        # checkpoint (confirmed $2B global comp — see spiderman below).
+        # Source: No Film School, Aug 2026.
+        "presale_pace_vs_spiderman_pct": 65,
     },
     "dune": {
         "yt_trailer_views":    None,
@@ -56,12 +60,22 @@ FALLBACK_SIGNALS = {
         "wiki_views_7d":       None,
         "wiki_wow_pct":        None,
         "imax_70mm_sold_out":  True,    # confirmed Apr 2026 — all US 70mm IMAX dates gone
+        # Second advance batch (70mm IMAX + PLF) sold out within hours; eBay
+        # resale hit $1,000/ticket, AMC/Fandango sites reportedly crashed.
+        # Source: No Film School, Aug 2026.
+        "imax_70mm_second_wave_sold_out": True,
+        "secondary_market_price_usd":     1000,
     },
     "spiderman": {
         "full_trailer_released": True,
         "trailer_date":          "2026-03-18",
         "yt_trailer_views_M":    None,   # populated from YouTube API when ID is configured
         "suggested_tier":        None,   # auto-calibrated from view count
+        # Confirmed outcome (Aug 2026): crossed $2B global box office.
+        # Overrides the trailer-view heuristic below with the real result.
+        # Source: No Film School, Aug 2026.
+        "confirmed_tier":           "Blockbuster",
+        "global_gross_confirmed_B": 2.0,
     },
     "calibration": {
         "avengers_score_adj":  0.0,   # adjustment to base audience score
@@ -184,6 +198,41 @@ def calibrate_from_imax_70mm_sellout(sold_out: bool, film: str) -> float:
     if not sold_out or film != "DUNE":
         return 0.0
     return +2.0   # cinephile core locked in — stronger than Alamo #1 signal
+
+
+def calibrate_from_imax_secondary_market(second_wave_sold_out: bool, resale_price_usd: float, film: str) -> float:
+    """
+    Audience score bump from a second advance-ticket sellout wave plus
+    secondary-market (scalper) pricing data.
+
+    A second 70mm/PLF batch selling out within hours — this time with eBay
+    resale hitting four figures and ticketing sites (AMC, Fandango) crashing
+    under demand — confirms the first sellout wasn't a one-off inventory
+    quirk. Only applies to Dune (70mm/PLF allocation).
+    """
+    if not second_wave_sold_out or film != "DUNE":
+        return 0.0
+    if resale_price_usd and resale_price_usd >= 500:
+        return +2.0
+    return +1.0
+
+
+def calibrate_from_presale_pace(pct_ahead: float, film: str) -> float:
+    """
+    Convert opening-weekend presale pacing (vs. a comparable benchmark title)
+    into an audience score adjustment.
+
+    Avengers: Doomsday is benchmarked against Spider-Man: Brand New Day,
+    which went on to cross $2B globally — a confirmed blockbuster comp.
+    Pacing meaningfully ahead of a $2B comp at the same pre-release
+    checkpoint is a strong demand signal.
+    """
+    if pct_ahead is None or film != "AVENGERS":
+        return 0.0
+    if pct_ahead >= 50:   return +3.0
+    elif pct_ahead >= 25: return +1.5
+    elif pct_ahead >= 0:  return 0.0
+    else:                 return -1.5
 
 
 def calibrate_from_trailer_engagement(views: int, likes: int) -> str | None:
@@ -945,9 +994,14 @@ def fetch_and_calibrate(base_dune_score: int = 87, base_av_score: int = 88) -> d
 
     # ── 7. Spider-Man: BND trailer calibration ───────────────────────────────
     spidey_yt_id = YOUTUBE_VIDEO_IDS.get("spiderman_full")
-    spidey_suggested_tier  = None
+    spidey_suggested_tier  = signals.get("spiderman", {}).get("confirmed_tier")
     spidey_trailer_fresh   = _is_fresh_trailer(signals.get("spiderman", {}).get("trailer_date"))
-    if yt.get("status") == "ok" and spidey_yt_id and spidey_yt_id in yt.get("videos", {}):
+    if spidey_suggested_tier:
+        # Real outcome is known (film has released) — this supersedes the
+        # trailer-view heuristic below rather than merely suggesting a tier.
+        signals["spiderman"]["suggested_tier"] = spidey_suggested_tier
+        sources_used.append("Spider-Man confirmed box office")
+    elif yt.get("status") == "ok" and spidey_yt_id and spidey_yt_id in yt.get("videos", {}):
         _spidey_vid    = yt["videos"][spidey_yt_id]
         spidey_views   = _spidey_vid["views"]
         spidey_views_M = spidey_views / 1_000_000
@@ -975,6 +1029,21 @@ def fetch_and_calibrate(base_dune_score: int = 87, base_av_score: int = 88) -> d
     if imax_sellout_adj != 0:
         dune_score_adj += imax_sellout_adj
         sources_used.append("70mm IMAX sellout")
+
+    # ── 8b. Second IMAX sellout wave + secondary market pricing ──────────────
+    imax_second_wave  = signals.get("dune", {}).get("imax_70mm_second_wave_sold_out", False)
+    resale_price       = signals.get("dune", {}).get("secondary_market_price_usd")
+    secondary_market_adj = calibrate_from_imax_secondary_market(imax_second_wave, resale_price, "DUNE")
+    if secondary_market_adj != 0:
+        dune_score_adj += secondary_market_adj
+        sources_used.append("IMAX secondary market")
+
+    # ── 8c. Avengers presale pacing vs Spider-Man comp ────────────────────────
+    presale_pace = signals.get("avengers", {}).get("presale_pace_vs_spiderman_pct")
+    presale_adj  = calibrate_from_presale_pace(presale_pace, "AVENGERS")
+    if presale_adj != 0:
+        av_score_adj += presale_adj
+        sources_used.append("Presale pacing vs Spider-Man comp")
 
     # ── 9. Final calibrated scores ────────────────────────────────────────────
     av_calibrated   = float(np.clip(base_av_score   + av_score_adj,   60, 100))
@@ -1013,13 +1082,17 @@ def fetch_and_calibrate(base_dune_score: int = 87, base_av_score: int = 88) -> d
         "dune_t1_fresh":         dune_t1_fresh,
         "imax_70mm_sold_out":    imax_70mm_sold_out,
         "imax_70mm_sellout_adj": imax_sellout_adj,
-        "notes": _build_notes(av_score_adj, dune_score_adj, yt, spidey_suggested_tier, imax_70mm_sold_out),
+        "imax_70mm_second_wave": imax_second_wave,
+        "presale_pace_vs_spiderman_pct": presale_pace,
+        "notes": _build_notes(av_score_adj, dune_score_adj, yt, spidey_suggested_tier, imax_70mm_sold_out,
+                               imax_second_wave, presale_pace),
     }
 
     return signals
 
 
-def _build_notes(av_score_adj, dune_score_adj, yt, spidey_tier=None, imax_70mm_sold_out=False) -> str:
+def _build_notes(av_score_adj, dune_score_adj, yt, spidey_tier=None, imax_70mm_sold_out=False,
+                  imax_second_wave=False, presale_pace=None) -> str:
     notes = []
     if av_score_adj < -2:
         notes.append(f"Avengers downgraded {av_score_adj:+.0f}pts — teaser decay matches Love&Thunder pattern.")
@@ -1029,12 +1102,18 @@ def _build_notes(av_score_adj, dune_score_adj, yt, spidey_tier=None, imax_70mm_s
         notes.append("Avengers signal neutral — not enough signal to move the needle yet.")
 
     if spidey_tier:
-        notes.append(f"Spider-Man: BND trailer auto-suggests '{spidey_tier}' tier for MCU brand signal.")
+        notes.append(f"Spider-Man: BND indicates '{spidey_tier}' tier for MCU brand signal.")
     else:
         notes.append("Spider-Man: BND trailer released 2026-03-18 — set YOUTUBE_VIDEO_IDS['spiderman_full'] to enable auto-calibration.")
 
     if imax_70mm_sold_out:
         notes.append("Dune 70mm IMAX sold out — cinephile core committed before full trailer drop (+2pts).")
+
+    if imax_second_wave:
+        notes.append("Second Dune 70mm/PLF sellout wave — eBay resale hit 1,000 USD, AMC/Fandango sites crashed.")
+
+    if presale_pace:
+        notes.append(f"Avengers presales pacing {presale_pace:+.0f}% vs Spider-Man: BND comp (confirmed 2B USD).")
 
     if yt and yt.get("status") != "ok":
         notes.append("Add YOUTUBE_API_KEY to Streamlit secrets for live trailer view data.")

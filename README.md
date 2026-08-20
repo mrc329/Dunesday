@@ -83,6 +83,9 @@ In `model/config.py` → `HYPE_SIGNALS`:
 | Avengers audience score | 88 ± 7 | Teaser decay signal (T1→T2: −53% on X) |
 | Avengers budget | $550M | Reported estimates |
 | Dune budget | $175M | Reported estimates |
+| Dune 2nd 70mm/PLF sellout wave | Sold out in hours, ~$1,000 resale | No Film School, Aug 2026 |
+| Avengers presale pace vs Spider-Man: BND | +65% at same checkpoint | No Film School, Aug 2026 |
+| Spider-Man: Brand New Day outcome | Confirmed $2B+ global | No Film School, Aug 2026 |
 
 ## What This Model Gets Right vs Wrong
 
@@ -92,12 +95,12 @@ In `model/config.py` → `HYPE_SIGNALS`:
 ## Next Updates
 
 - [ ] CinemaCon trailer performance (Apr 16)
-- [ ] Dune first trailer 72hr view count (Q2 2026)  
-- [ ] Fandango presale ratio (Sept 2026)
+- [ ] Dune first trailer 72hr view count (Q2 2026)
+- [x] Avengers presale pacing vs. comp title (Aug 2026 — No Film School; official Fandango ratio still pending Sept 2026)
 - [ ] Autonomous Google Trends / YouTube scraper
 
 ## Sources
 
-Empire City Box Office · Dark Horizons · World of Reel · The Hollywood Reporter · Collider · Alamo Drafthouse/Collider Poll · Screen Rant · Wikipedia
+Empire City Box Office · Dark Horizons · World of Reel · The Hollywood Reporter · Collider · Alamo Drafthouse/Collider Poll · Screen Rant · Wikipedia · No Film School
 
 *Armchair analysis — no studios were consulted or harmed in the making of this model.*
