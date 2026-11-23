@@ -315,7 +315,9 @@ _YT_SLOT_LABELS = {
     "avengers_t3":        "Avengers T3",
     "avengers_t4":        "Avengers T4",
     "avengers_countdown": "Avengers Countdown",
+    "avengers_full":      "Avengers Trailer",
     "dune_t1":            "Dune T1",
+    "dune_full":          "Dune Trailer",
     "spiderman_full":     "Spider-Man BND T1",
 }
 
@@ -872,6 +874,15 @@ with tab3:
                       help="Full trailer 24h YouTube view count. Add YOUTUBE_API_KEY to Streamlit secrets "
                            "to enable live data. Benchmarks: Endgame 289M, IW 230M, D&W 365M.")
 
+        # Full trailer — tracked separately from the T1–T4 teaser total
+        _av_full_views = _yt_views_M("avengers_full")
+        if yt_live:
+            st.metric("YT full trailer views",
+                      f"{_av_full_views:.1f}M" if _av_full_views is not None else "—",
+                      delta="Full trailer · live" if _av_full_views is not None else "Not in API response",
+                      help="YouTube views on the official Avengers: Doomsday full trailer. "
+                           "Also counted in the model's YouTube calibration total.")
+
         # Wikipedia pageviews
         _av_wiki_7d  = av_sig.get("wiki_views_7d")
         _av_wiki_wow = av_sig.get("wiki_wow_pct")
@@ -914,7 +925,8 @@ with tab3:
         st.markdown(f"<div style='color:{_dune_color}; font-size:0.9rem; font-weight:700; letter-spacing:2px; margin-bottom:10px; padding-bottom:4px; border-bottom:1px solid {_dune_color};'>DUNE: PART THREE</div>",
                     unsafe_allow_html=True)
 
-        dune_yt_views = _yt_views_M("dune_t1")
+        _dune_slot_views = [v for v in (_yt_views_M("dune_t1"), _yt_views_M("dune_full")) if v is not None]
+        dune_yt_views = sum(_dune_slot_views) if _dune_slot_views else None
         dune_color    = palette["dune"]
         dune_dim      = palette["dim"]
         _dune_t1_fresh   = cal.get("dune_t1_fresh", False)
@@ -942,12 +954,12 @@ with tab3:
             st.markdown(
                 f"<div style='border-left:2px solid {dune_color}; padding:8px 14px; "
                 f"font-size:0.82rem; color:{dune_dim};'>"
-                f"Trailer live · <b style='color:{dune_color}'>{dune_yt_views:.0f}M</b> views"
+                f"Teaser + trailer · <b style='color:{dune_color}'>{dune_yt_views:.0f}M</b> views"
                 f"{_dune_likes_str}{_ratio_str}</div>",
                 unsafe_allow_html=True,
             )
         else:
-            st.info("No trailer released. WB following Part Two marketing cadence — strategic delay.")
+            st.info("Trailer views unavailable — add YOUTUBE_API_KEY to Streamlit secrets.")
 
         _imax_sold_out    = cal.get("imax_70mm_sold_out", False)
         _imax_sellout_adj = cal.get("imax_70mm_sellout_adj", 0.0)
@@ -1016,7 +1028,7 @@ with tab3:
                     unsafe_allow_html=True)
 
         yt_rows = []
-        for slot in list(_AV_TEASER_SLOTS) + ["avengers_countdown", "dune_t1", "spiderman_full"]:
+        for slot in list(_AV_TEASER_SLOTS) + ["avengers_countdown", "avengers_full", "dune_t1", "dune_full", "spiderman_full"]:
             vid_id = YOUTUBE_VIDEO_IDS.get(slot)
             if not vid_id:
                 continue
@@ -1600,6 +1612,12 @@ with tab6:
 
     st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
 
+    # Full trailer — full width
+    st.caption("Official Trailer")
+    st.video(YOUTUBE_TRAILER_URLS["avengers_full"])
+
+    st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
+
     # Countdown clock — full width
     st.caption("Countdown Clock")
     st.video(YOUTUBE_TRAILER_URLS["avengers_countdown"])
@@ -1616,23 +1634,13 @@ with tab6:
     st.markdown(f"<hr style='border-color:{palette['card_rule']}; margin:6px 0 14px;'>",
                 unsafe_allow_html=True)
 
-    d1, d2 = st.columns([1, 1])
+    d1, d2 = st.columns(2)
     with d1:
+        st.caption("Official Trailer")
+        st.video(YOUTUBE_TRAILER_URLS["dune_full"])
+    with d2:
         st.caption("Teaser 1")
         st.video(YOUTUBE_TRAILER_URLS["dune_t1"])
-    with d2:
-        st.markdown(
-            f"""
-            <div style='padding:24px 0; color:{palette['dim']}; font-size:0.82rem; line-height:1.8;'>
-            <b style='color:{palette['dune']}'>Strategic silence.</b><br><br>
-            WB following the Part Two marketing cadence — first trailer
-            expected closer to the Dec 18 release window.<br><br>
-            Dune's lower Wikipedia search interest reflects zero promotional
-            material released to date, not audience demand.
-            </div>
-            """.strip(),
-            unsafe_allow_html=True,
-        )
 
 
 # ── TAB 7: MODEL — ASSUMPTIONS, VARIABLES, FORMULAS ──────────────────────────

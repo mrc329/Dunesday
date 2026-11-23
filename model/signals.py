@@ -41,10 +41,10 @@ FALLBACK_SIGNALS = {
     "last_updated":  "2026-08-19",
     "source":        "fallback",
     "avengers": {
-        "yt_trailer_views":  None,  # YouTube view count (full trailer not out yet)
+        "yt_trailer_views":  None,  # YouTube view count (populated from API)
         "teaser_views_x_M":  [53.0, 25.0, 15.0, 9.0],  # T1-T4 on X
         "combined_views_B":  1.02,
-        "full_trailer_out":  False,
+        "full_trailer_out":  True,
         "wiki_views_7d":     None,  # Wikipedia pageviews last 7 days
         "wiki_wow_pct":      None,  # week-over-week % change
         # Presale pacing vs Spider-Man: Brand New Day at the same pre-release
@@ -54,7 +54,7 @@ FALLBACK_SIGNALS = {
     },
     "dune": {
         "yt_trailer_views":    None,
-        "full_trailer_out":    False,
+        "full_trailer_out":    True,
         "trailer_date":        "2026-03-18",
         "alamo_rank":          1,
         "wiki_views_7d":       None,
@@ -267,20 +267,23 @@ YOUTUBE_VIDEO_IDS = {
     "avengers_t2":       "kH1XlwHQv9o",   # Teaser 2
     "avengers_t3":       "1clWprLC5Ak",   # Teaser 3
     "avengers_t4":       "UiMg566PREA",   # Teaser 4
-    "avengers_full":     None,            # Full trailer — not released yet
+    "avengers_full":     "Wb8Tq_HD4E8",   # Full trailer
     "avengers_countdown": "f17J3AXVK5w",  # Countdown clock
     "dune_t1":           "3_9vCamtuPY",   # Dune: Part Three Teaser
+    "dune_full":         "uJqaGLmZpGo",   # Dune: Part Three full trailer
     "spiderman_full":    "8TZMtslA3UY",   # Spider-Man: BND trailer (2026-03-18)
 }
 
 # YouTube URLs for embedded playback (trailer display)
 YOUTUBE_TRAILER_URLS = {
     "dune_t1":            "https://www.youtube.com/watch?v=3_9vCamtuPY",
+    "dune_full":          "https://www.youtube.com/watch?v=uJqaGLmZpGo",
     "avengers_t1":        "https://www.youtube.com/watch?v=399Ez7WHK5s",
     "avengers_t2":        "https://www.youtube.com/watch?v=kH1XlwHQv9o",
     "avengers_t3":        "https://www.youtube.com/watch?v=1clWprLC5Ak",
     "avengers_t4":        "https://www.youtube.com/watch?v=UiMg566PREA",
     "avengers_countdown": "https://www.youtube.com/watch?v=f17J3AXVK5w",
+    "avengers_full":      "https://www.youtube.com/watch?v=Wb8Tq_HD4E8",
     "spiderman_full":     "https://www.youtube.com/watch?v=8TZMtslA3UY",
 }
 
@@ -859,7 +862,7 @@ def fetch_and_calibrate(base_dune_score: int = 87, base_av_score: int = 88) -> d
         }
         dune_ids = {
             YOUTUBE_VIDEO_IDS.get(k)
-            for k in ("dune_t1",)
+            for k in ("dune_t1", "dune_full")
             if YOUTUBE_VIDEO_IDS.get(k)
         }
         av_yt_total = sum(

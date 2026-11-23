@@ -176,7 +176,7 @@ HYPE_SIGNALS = {
         "instagram_M": 505,
         "tiktok_M": 103,
         "social_vol_vs_avg_pct": 188,
-        "full_trailer_released": False,
+        "full_trailer_released": True,
         # Opening-weekend presale tracking, pacing 65% ahead of Spider-Man:
         # Brand New Day at the same pre-release checkpoint — a confirmed $2B
         # global comp (see spiderman.global_gross_confirmed_B below).
@@ -192,7 +192,7 @@ HYPE_SIGNALS = {
     "dune": {
         "teaser_views": [],
         "combined_views_B": 0,
-        "full_trailer_released": False,
+        "full_trailer_released": True,
         "trailer_date": "2026-03-18",   # Dune: Part Three teaser released 2026-03-18
         "alamo_poll_rank": 1,
         "alamo_poll_respondents": 14000,
